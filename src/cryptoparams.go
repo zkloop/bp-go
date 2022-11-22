@@ -10,7 +10,7 @@ import (
 	"encoding/binary"
 	"math/big"
 
-	"github.com/btcsuite/btcd/btcec"
+	btcec "github.com/btcsuite/btcd/btcec/v2" 
 )
 
 var VecLength = 64
@@ -59,22 +59,22 @@ func NewECPrimeGroupKey(n int) CryptoParams {
 			potentialXValue[i+1] = elem
 		}
 
-		gen2, err := btcec.ParsePubKey(potentialXValue, btcec.S256())
+		gen2, err := btcec.ParsePubKey(potentialXValue)
 		if err == nil {
 			if confirmed == 2*n { // once we've generated all g and h values then assign this to u
-				u = ECPoint{gen2.X, gen2.Y}
+				u = ECPoint{gen2.X(), gen2.Y()}
 				//fmt.Println("Got that U value")
 			} else if confirmed == 2*n+1 {
-				cg = ECPoint{gen2.X, gen2.Y}
+				cg = ECPoint{gen2.X(), gen2.Y()}
 
 			} else if confirmed == 2*n+2 {
-				ch = ECPoint{gen2.X, gen2.Y}
+				ch = ECPoint{gen2.X(), gen2.Y()}
 			} else {
 				if confirmed%2 == 0 {
-					gen1Vals[confirmed/2] = ECPoint{gen2.X, gen2.Y}
+					gen1Vals[confirmed/2] = ECPoint{gen2.X(), gen2.Y()}
 					//fmt.Println("new G Value")
 				} else {
-					gen2Vals[confirmed/2] = ECPoint{gen2.X, gen2.Y}
+					gen2Vals[confirmed/2] = ECPoint{gen2.X(), gen2.Y()}
 					//fmt.Println("new H value")
 				}
 			}

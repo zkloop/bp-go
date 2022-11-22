@@ -256,25 +256,30 @@ func RPProve(v *big.Int) RangeProof {
 	return rpresult
 }
 
-func RPVerify(rp RangeProof) bool {
+func RPVerify(rp RangeProof, uncompress bool) bool {
 	// verify the challenges
-	chal1s256 := sha256.Sum256([]byte(rp.A.X.String() + rp.A.Y.String()))
-	cy := new(big.Int).SetBytes(chal1s256[:])
-	if cy.Cmp(rp.Cy) != 0 {
-		fmt.Println("RPVerify - Challenge Cy failing!")
-		return false
-	}
-	chal2s256 := sha256.Sum256([]byte(rp.S.X.String() + rp.S.Y.String()))
-	cz := new(big.Int).SetBytes(chal2s256[:])
-	if cz.Cmp(rp.Cz) != 0 {
-		fmt.Println("RPVerify - Challenge Cz failing!")
-		return false
-	}
-	chal3s256 := sha256.Sum256([]byte(rp.T1.X.String() + rp.T1.Y.String() + rp.T2.X.String() + rp.T2.Y.String()))
-	cx := new(big.Int).SetBytes(chal3s256[:])
-	if cx.Cmp(rp.Cx) != 0 {
-		fmt.Println("RPVerify - Challenge Cx failing!")
-		return false
+	var cx, cy, cz *big.Int
+	if uncompress {
+		
+	} else {
+		chal1s256 := sha256.Sum256([]byte(rp.A.X.String() + rp.A.Y.String()))
+		cy = new(big.Int).SetBytes(chal1s256[:])
+		if cy.Cmp(rp.Cy) != 0 {
+			fmt.Println("RPVerify - Challenge Cy failing!")
+			return false
+		}
+		chal2s256 := sha256.Sum256([]byte(rp.S.X.String() + rp.S.Y.String()))
+		cz = new(big.Int).SetBytes(chal2s256[:])
+		if cz.Cmp(rp.Cz) != 0 {
+			fmt.Println("RPVerify - Challenge Cz failing!")
+			return false
+		}
+		chal3s256 := sha256.Sum256([]byte(rp.T1.X.String() + rp.T1.Y.String() + rp.T2.X.String() + rp.T2.Y.String()))
+		cx = new(big.Int).SetBytes(chal3s256[:])
+		if cx.Cmp(rp.Cx) != 0 {
+			fmt.Println("RPVerify - Challenge Cx failing!")
+			return false
+		}
 	}
 
 	// given challenges are correct, very range proof
