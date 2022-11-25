@@ -1,8 +1,6 @@
-module github.com/r2ishiguro/bp-go
+module github.com/r2ishiguro/bp
 
 go 1.18
-
-replace github.com/r2ishiguro/bp-go => ./
 
 require github.com/btcsuite/btcd/btcec/v2 v2.3.2
 
