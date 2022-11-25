@@ -17,6 +17,8 @@ type RangeProof struct {
 	Th   *big.Int
 	Mu   *big.Int
 	IPP  InnerProdArg
+	L    []*big.Int
+	R    []*big.Int
 
 	// challenges
 	Cy *big.Int
@@ -87,7 +89,7 @@ RPProver : Range Proof Prove
 
 Given a value v, provides a range proof that v is inside 0 to 2^64-1
 */
-func RPProve(v *big.Int) RangeProof {
+func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 
 	rpresult := RangeProof{}
 
@@ -101,8 +103,6 @@ func RPProve(v *big.Int) RangeProof {
 		panic("Value is above range! Not proving.")
 	}
 
-	gamma, err := rand.Int(rand.Reader, EC.N)
-	check(err)
 	comm := EC.G.Mult(v).Add(EC.H.Mult(gamma))
 	rpresult.Comm = comm
 
@@ -126,13 +126,28 @@ func RPProve(v *big.Int) RangeProof {
 	S := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, sL, sR).Add(EC.H.Mult(rho))
 	rpresult.S = S
 
-	chal1s256 := sha256.Sum256([]byte(A.X.String() + A.Y.String()))
-	cy := new(big.Int).SetBytes(chal1s256[:])
+	h := sha256.New()
+	buf := make([]byte, 32)
+	comm.X.FillBytes(buf)	// comm
+	h.Write(buf)
+	h.Write([]byte{byte(EC.V)})	// n
+	A.X.FillBytes(buf)	// A.x
+	h.Write(buf)
+	S.X.FillBytes(buf)	// S.x
+	h.Write(buf)
+	chal1s256 := h.Sum(nil)
+	cy := new(big.Int).SetBytes(chal1s256)
 
 	rpresult.Cy = cy
 
-	chal2s256 := sha256.Sum256([]byte(S.X.String() + S.Y.String()))
-	cz := new(big.Int).SetBytes(chal2s256[:])
+	h.Reset()
+	A.X.FillBytes(buf)		// A.x
+	h.Write(buf)
+	S.X.FillBytes(buf)		// S.x
+	h.Write(buf)
+	h.Write(chal1s256)		// y
+	chal2s256 := h.Sum(nil)
+	cz := new(big.Int).SetBytes(chal2s256)
 
 	rpresult.Cz = cz
 	z2 := new(big.Int).Exp(cz, big.NewInt(2), EC.N)
@@ -186,8 +201,14 @@ func RPProve(v *big.Int) RangeProof {
 	rpresult.T1 = T1
 	rpresult.T2 = T2
 
-	chal3s256 := sha256.Sum256([]byte(T1.X.String() + T1.Y.String() + T2.X.String() + T2.Y.String()))
-	cx := new(big.Int).SetBytes(chal3s256[:])
+	h.Reset()
+	h.Write(chal2s256)		// z
+	T1.X.FillBytes(buf)		// T1.x
+	h.Write(buf)
+	T2.X.FillBytes(buf)		// T2.x
+	h.Write(buf)
+	chal3s256 := h.Sum(nil)
+	cx := new(big.Int).SetBytes(chal3s256)
 
 	rpresult.Cx = cx
 
@@ -225,6 +246,12 @@ func RPProve(v *big.Int) RangeProof {
 	mu := new(big.Int).Mod(new(big.Int).Add(alpha, new(big.Int).Mul(rho, cx)), EC.N)
 	rpresult.Mu = mu
 
+	if uncompress {
+		rpresult.L = left
+		rpresult.R = right
+		return rpresult
+	}
+
 	HPrime := make([]ECPoint, len(EC.BPH))
 
 	for i := range HPrime {
@@ -256,30 +283,48 @@ func RPProve(v *big.Int) RangeProof {
 	return rpresult
 }
 
-func RPVerify(rp RangeProof, uncompress bool) bool {
+func RPVerify(rp RangeProof) bool {
 	// verify the challenges
 	var cx, cy, cz *big.Int
-	if uncompress {
-		
-	} else {
-		chal1s256 := sha256.Sum256([]byte(rp.A.X.String() + rp.A.Y.String()))
-		cy = new(big.Int).SetBytes(chal1s256[:])
-		if cy.Cmp(rp.Cy) != 0 {
-			fmt.Println("RPVerify - Challenge Cy failing!")
-			return false
-		}
-		chal2s256 := sha256.Sum256([]byte(rp.S.X.String() + rp.S.Y.String()))
-		cz = new(big.Int).SetBytes(chal2s256[:])
-		if cz.Cmp(rp.Cz) != 0 {
-			fmt.Println("RPVerify - Challenge Cz failing!")
-			return false
-		}
-		chal3s256 := sha256.Sum256([]byte(rp.T1.X.String() + rp.T1.Y.String() + rp.T2.X.String() + rp.T2.Y.String()))
-		cx = new(big.Int).SetBytes(chal3s256[:])
-		if cx.Cmp(rp.Cx) != 0 {
-			fmt.Println("RPVerify - Challenge Cx failing!")
-			return false
-		}
+
+	h := sha256.New()
+	buf := make([]byte, 32)
+	rp.Comm.X.FillBytes(buf)	// comm
+	h.Write(buf)
+	h.Write([]byte{byte(EC.V)})	// n
+	rp.A.X.FillBytes(buf)		// A.x
+	h.Write(buf)
+	rp.S.X.FillBytes(buf)		// S.x
+	h.Write(buf)
+	chal1s256 := h.Sum(nil)
+	cy = new(big.Int).SetBytes(chal1s256)
+	if rp.Cy != nil && cy.Cmp(rp.Cy) != 0 {
+		fmt.Println("RPVerify - Challenge Cy failing!")
+		return false
+	}
+	h.Reset()
+	rp.A.X.FillBytes(buf)		// A.x
+	h.Write(buf)
+	rp.S.X.FillBytes(buf)		// S.x
+	h.Write(buf)
+	h.Write(chal1s256)		// y
+	chal2s256 := h.Sum(nil)
+	cz = new(big.Int).SetBytes(chal2s256)
+	if rp.Cz != nil && cz.Cmp(rp.Cz) != 0 {
+		fmt.Println("RPVerify - Challenge Cz failing!")
+		return false
+	}
+	h.Reset()
+	h.Write(chal2s256)		// z
+	rp.T1.X.FillBytes(buf)		// T1.x
+	h.Write(buf)
+	rp.T2.X.FillBytes(buf)		// T2.x
+	h.Write(buf)
+	chal3s256 := h.Sum(nil)
+	cx = new(big.Int).SetBytes(chal3s256)
+	if rp.Cx != nil && cx.Cmp(rp.Cx) != 0 {
+		fmt.Println("RPVerify - Challenge Cx failing!")
+		return false
 	}
 
 	// given challenges are correct, very range proof
@@ -328,7 +373,13 @@ func RPVerify(rp RangeProof, uncompress bool) bool {
 	P := rp.A.Add(rp.S.Mult(cx)).Add(tmp1).Add(tmp2).Add(EC.H.Mult(rp.Mu).Neg())
 	//fmt.Println(P)
 
-	if !InnerProductVerifyFast(rp.Th, P, EC.U, EC.BPG, HPrime, rp.IPP) {
+	var result bool
+	if rp.L != nil && rp.R != nil {
+		result = P.Equal(TwoVectorPCommitWithGens(EC.BPG, HPrime, rp.L, rp.R))
+	} else {
+		result = InnerProductVerifyFast(rp.Th, P, EC.U, EC.BPG, HPrime, rp.IPP)
+	}
+	if !result {
 		fmt.Println("RPVerify - Uh oh! Check line (65) of verification!")
 		return false
 	}

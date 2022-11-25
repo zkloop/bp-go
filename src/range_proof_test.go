@@ -7,10 +7,15 @@ import (
 	"testing"
 )
 
+const NBITS = 20
+const uncompress = true
+
 func TestRPVerify1(t *testing.T) {
-	EC = NewECPrimeGroupKey(64)
+	EC = NewECPrimeGroupKey(NBITS)
+	gamma, err := rand.Int(rand.Reader, EC.N)
+	check(err)
 	// Testing smallest number in range
-	if RPVerify(RPProve(big.NewInt(0))) {
+	if RPVerify(RPProve(big.NewInt(0), gamma, uncompress)) {
 		fmt.Println("Range Proof Verification works")
 	} else {
 		t.Error("*****Range Proof FAILURE")
@@ -18,9 +23,11 @@ func TestRPVerify1(t *testing.T) {
 }
 
 func TestRPVerify2(t *testing.T) {
-	EC = NewECPrimeGroupKey(64)
+	EC = NewECPrimeGroupKey(NBITS)
+	gamma, err := rand.Int(rand.Reader, EC.N)
+	check(err)
 	// Testing largest number in range
-	if RPVerify(RPProve(new(big.Int).Sub(new(big.Int).Exp(big.NewInt(2), big.NewInt(63), EC.N), big.NewInt(1)))) {
+	if RPVerify(RPProve(new(big.Int).Sub(new(big.Int).Exp(big.NewInt(2), big.NewInt(NBITS - 1), EC.N), big.NewInt(1)), gamma, uncompress)) {
 		fmt.Println("Range Proof Verification works")
 	} else {
 		t.Error("*****Range Proof FAILURE")
@@ -28,19 +35,11 @@ func TestRPVerify2(t *testing.T) {
 }
 
 func TestRPVerify3(t *testing.T) {
-	EC = NewECPrimeGroupKey(64)
+	EC = NewECPrimeGroupKey(NBITS)
+	gamma, err := rand.Int(rand.Reader, EC.N)
+	check(err)
 	// Testing the value 3
-	if RPVerify(RPProve(big.NewInt(3))) {
-		fmt.Println("Range Proof Verification works")
-	} else {
-		t.Error("*****Range Proof FAILURE")
-	}
-}
-
-func TestRPVerify4(t *testing.T) {
-	EC = NewECPrimeGroupKey(32)
-	// Testing smallest number in range
-	if RPVerify(RPProve(big.NewInt(0))) {
+	if RPVerify(RPProve(big.NewInt(3), gamma, uncompress)) {
 		fmt.Println("Range Proof Verification works")
 	} else {
 		t.Error("*****Range Proof FAILURE")
@@ -48,13 +47,15 @@ func TestRPVerify4(t *testing.T) {
 }
 
 func TestRPVerifyRand(t *testing.T) {
-	EC = NewECPrimeGroupKey(64)
+	EC = NewECPrimeGroupKey(NBITS)
+	gamma, err := rand.Int(rand.Reader, EC.N)
+	check(err)
 
-	ran, err := rand.Int(rand.Reader, new(big.Int).Exp(big.NewInt(2), big.NewInt(64), EC.N))
+	ran, err := rand.Int(rand.Reader, new(big.Int).Exp(big.NewInt(2), big.NewInt(NBITS), EC.N))
 	check(err)
 
 	// Testing the value 3
-	if RPVerify(RPProve(ran)) {
+	if RPVerify(RPProve(ran, gamma, uncompress)) {
 		fmt.Println("Range Proof Verification works")
 	} else {
 		t.Error("*****Range Proof FAILURE")
