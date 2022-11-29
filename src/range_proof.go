@@ -302,6 +302,12 @@ func RPVerify(rp RangeProof) bool {
 		fmt.Println("RPVerify - Challenge Cy failing!")
 		return false
 	}
+	fmt.Printf("V = %x\n", rp.Comm.X)
+	fmt.Printf("n = %x\n", EC.V)
+	fmt.Printf("A = %x\n", rp.A.X)
+	fmt.Printf("S = %x\n", rp.S.X)
+	fmt.Printf("y = %x\n", cy)
+
 	h.Reset()
 	rp.A.X.FillBytes(buf)		// A.x
 	h.Write(buf)
@@ -314,6 +320,8 @@ func RPVerify(rp RangeProof) bool {
 		fmt.Println("RPVerify - Challenge Cz failing!")
 		return false
 	}
+	fmt.Printf("z = %x\n", cz)
+
 	h.Reset()
 	h.Write(chal2s256)		// z
 	rp.T1.X.FillBytes(buf)		// T1.x
@@ -326,6 +334,7 @@ func RPVerify(rp RangeProof) bool {
 		fmt.Println("RPVerify - Challenge Cx failing!")
 		return false
 	}
+	fmt.Printf("x = %x\n", cx)
 
 	// given challenges are correct, very range proof
 	PowersOfY := PowerVector(EC.V, cy)
