@@ -302,11 +302,6 @@ func RPVerify(rp RangeProof) bool {
 		fmt.Println("RPVerify - Challenge Cy failing!")
 		return false
 	}
-	fmt.Printf("V = %x\n", rp.Comm.X)
-	fmt.Printf("n = %x\n", EC.V)
-	fmt.Printf("A = %x\n", rp.A.X)
-	fmt.Printf("S = %x\n", rp.S.X)
-	fmt.Printf("y = %x\n", cy)
 
 	h.Reset()
 	rp.A.X.FillBytes(buf)		// A.x
@@ -320,7 +315,6 @@ func RPVerify(rp RangeProof) bool {
 		fmt.Println("RPVerify - Challenge Cz failing!")
 		return false
 	}
-	fmt.Printf("z = %x\n", cz)
 
 	h.Reset()
 	h.Write(chal2s256)		// z
@@ -334,7 +328,33 @@ func RPVerify(rp RangeProof) bool {
 		fmt.Println("RPVerify - Challenge Cx failing!")
 		return false
 	}
+
+	/* @@
+	fmt.Printf("G = (%x, %x)\n", EC.G.X, EC.G.Y);
+	fmt.Printf("H = (%x, %x)\n", EC.H.X, EC.H.Y);
+	fmt.Printf("V = %x\n", rp.Comm.X)
+	fmt.Printf("n = %x\n", EC.V)
+	fmt.Printf("A = %x\n", rp.A.X)
+	fmt.Printf("S = %x\n", rp.S.X)
+	fmt.Printf("y = %x\n", cy)
+	fmt.Printf("z = %x\n", cz)
+	v := 25
+	aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", EC.V)))
+	aR := VectorAddScalar(aL, big.NewInt(-1))
+	alpha, _ := new(big.Int).SetString("ade0b876903df1a0e56a5d4028bd8653b819d2bd1aed8da0ccef36a8c70d778b", 16)
+	A := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aL, aR).Add(EC.H.Mult(alpha))
+	fmt.Printf("A' = %x\n", A.X)
+	for i, p := range EC.BPG {
+		fmt.Printf("G[%d]: (%x, %x)\n", i, p.X, p.Y)
+		fmt.Printf("H[%d]: (%x, %x)\n", i, EC.BPH[i].X, EC.BPH[i].Y)
+	}
+	fmt.Printf("T1.x = %x\n", rp.T1.X)
+	fmt.Printf("T2.x = %x\n", rp.T2.X)
 	fmt.Printf("x = %x\n", cx)
+	fmt.Printf("Th = %x\n", rp.Th)
+	fmt.Printf("Tau = %x\n", rp.Tau)
+	fmt.Printf("Mu = %x\n", rp.Mu)
+	@@ */
 
 	// given challenges are correct, very range proof
 	PowersOfY := PowerVector(EC.V, cy)
@@ -350,8 +370,8 @@ func RPVerify(rp RangeProof) bool {
 
 	if !lhs.Equal(rhs) {
 		fmt.Println("RPVerify - Uh oh! Check line (63) of verification")
-		fmt.Println(rhs)
-		fmt.Println(lhs)
+		fmt.Printf("rhs = %x\n", rhs)
+		fmt.Printf("lhs = %x\n", lhs)
 		return false
 	}
 
