@@ -89,6 +89,198 @@ RPProver : Range Proof Prove
 
 Given a value v, provides a range proof that v is inside 0 to 2^64-1
 */
+
+type MPRangeContext struct {
+	AL []*big.Int
+	AR []*big.Int
+	SL []*big.Int
+	SR []*big.Int
+	Alpha *big.Int
+	Rho *big.Int
+	Tau1 *big.Int
+	Tau2 *big.Int
+	T0 *big.Int
+	T1 *big.Int
+	T2 *big.Int
+	V *big.Int
+}
+
+func RPProveStep0(ctx *MPRangeContext, rpresult *RangeProof, v *big.Int, gamma *big.Int) error {
+	if v.Cmp(big.NewInt(0)) == -1 {
+		panic("Value is below range! Not proving")
+	}
+
+	if v.Cmp(new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(EC.V)), EC.N)) == 1 {
+		panic("Value is above range! Not proving.")
+	}
+
+	comm := EC.G.Mult(v).Add(EC.H.Mult(gamma))
+	rpresult.Comm = comm
+
+	// break up v into its bitwise representation
+	//aL := 0
+	aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", EC.V)))
+	aR := VectorAddScalar(aL, big.NewInt(-1))
+
+	alpha, err := rand.Int(rand.Reader, EC.N)
+	check(err)
+
+	A := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aL, aR).Add(EC.H.Mult(alpha))
+	rpresult.A = A
+
+	sL := RandVector(EC.V)
+	sR := RandVector(EC.V)
+
+	rho, err := rand.Int(rand.Reader, EC.N)
+	check(err)
+
+	S := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, sL, sR).Add(EC.H.Mult(rho))
+	rpresult.S = S
+
+	ctx.AL = aL
+	ctx.AR = aR
+	ctx.SL = sL
+	ctx.SR = sR
+	ctx.Alpha = alpha
+	ctx.Rho = rho
+	ctx.V = v
+
+	return nil
+}
+
+func RPProveStep1(ctx *MPRangeContext, rpresult *RangeProof) error {
+	aL := ctx.AL
+	aR := ctx.AR
+	sL := ctx.SL
+	sR := ctx.SR
+	v := ctx.V
+
+	cy := rpresult.Cy
+	cz := rpresult.Cz
+
+	PowerOfTwos := PowerVector(EC.V, big.NewInt(2))
+
+	z2 := new(big.Int).Exp(cz, big.NewInt(2), EC.N)
+	// need to generate l(X), r(X), and t(X)=<l(X),r(X)>
+
+	/*
+			Java code on how to calculate t1 and t2
+
+				FieldVector ys = FieldVector.from(VectorX.iterate(n, BigInteger.ONE, y::multiply),q); //powers of y
+			    FieldVector l0 = aL.add(z.negate());
+		        FieldVector l1 = sL;
+		        FieldVector twoTimesZSquared = twos.times(zSquared);
+		        FieldVector r0 = ys.hadamard(aR.add(z)).add(twoTimesZSquared);
+		        FieldVector r1 = sR.hadamard(ys);
+		        BigInteger k = ys.sum().multiply(z.subtract(zSquared)).subtract(zCubed.shiftLeft(n).subtract(zCubed));
+		        BigInteger t0 = k.add(zSquared.multiply(number));
+		        BigInteger t1 = l1.innerPoduct(r0).add(l0.innerPoduct(r1));
+		        BigInteger t2 = l1.innerPoduct(r1);
+		   		PolyCommitment<T> polyCommitment = PolyCommitment.from(base, t0, VectorX.of(t1, t2));
+
+
+	*/
+	PowerOfCY := PowerVector(EC.V, cy)
+	// fmt.Println(PowerOfCY)
+	l0 := VectorAddScalar(aL, new(big.Int).Neg(cz))
+	// l1 := sL
+	r0 := VectorAdd(
+		VectorHadamard(
+			PowerOfCY,
+			VectorAddScalar(aR, cz)),
+		ScalarVectorMul(
+			PowerOfTwos,
+			z2))
+	r1 := VectorHadamard(sR, PowerOfCY)
+
+	//calculate t0
+	t0 := new(big.Int).Mod(new(big.Int).Add(new(big.Int).Mul(v, z2), Delta(PowerOfCY, cz)), EC.N)
+
+	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(sL, r0), InnerProduct(l0, r1)), EC.N)
+	t2 := InnerProduct(sL, r1)
+
+	// given the t_i values, we can generate commitments to them
+	tau1, err := rand.Int(rand.Reader, EC.N)
+	check(err)
+	tau2, err := rand.Int(rand.Reader, EC.N)
+	check(err)
+
+	T1 := EC.G.Mult(t1).Add(EC.H.Mult(tau1)) //commitment to t1
+	T2 := EC.G.Mult(t2).Add(EC.H.Mult(tau2)) //commitment to t2
+
+	rpresult.T1 = T1
+	rpresult.T2 = T2
+
+	ctx.Tau1 = tau1
+	ctx.Tau2 = tau2
+	ctx.T0 = t0
+	ctx.T1 = t1
+	ctx.T2 = t2
+
+	return nil
+}
+
+func RPProveStep2(ctx *MPRangeContext, rpresult *RangeProof, gamma *big.Int) error {
+	alpha := ctx.Alpha
+	rho := ctx.Rho
+	tau1 := ctx.Tau1
+	tau2 := ctx.Tau2
+	aL := ctx.AL
+	aR := ctx.AR
+	sL := ctx.SL
+	sR := ctx.SR
+	t0 := ctx.T0
+	t1 := ctx.T1
+	t2 := ctx.T2
+
+	cy := rpresult.Cy
+	cz := rpresult.Cz
+	cx := rpresult.Cx
+
+	PowerOfTwos := PowerVector(EC.V, big.NewInt(2))
+	PowerOfCY := PowerVector(EC.V, cy)
+	z2 := new(big.Int).Exp(cz, big.NewInt(2), EC.N)
+
+	left := CalculateL(aL, sL, cz, cx)
+	right := CalculateR(aR, sR, PowerOfCY, PowerOfTwos, cz, cx)
+
+	thatPrime := new(big.Int).Mod( // t0 + t1*x + t2*x^2
+		new(big.Int).Add(
+			t0,
+			new(big.Int).Add(
+				new(big.Int).Mul(
+					t1, cx),
+				new(big.Int).Mul(
+					new(big.Int).Mul(cx, cx),
+					t2))), EC.N)
+
+	that := InnerProduct(left, right) // NOTE: BP Java implementation calculates this from the t_i
+
+	// thatPrime and that should be equal
+	if thatPrime.Cmp(that) != 0 {
+		fmt.Println("Proving -- Uh oh! Two diff ways to compute same value not working")
+		fmt.Printf("\tthatPrime = %s\n", thatPrime.String())
+		fmt.Printf("\tthat = %s \n", that.String())
+	}
+
+	rpresult.Th = thatPrime
+
+	taux1 := new(big.Int).Mod(new(big.Int).Mul(tau2, new(big.Int).Mul(cx, cx)), EC.N)
+	taux2 := new(big.Int).Mod(new(big.Int).Mul(tau1, cx), EC.N)
+	taux3 := new(big.Int).Mod(new(big.Int).Mul(z2, gamma), EC.N)
+	taux := new(big.Int).Mod(new(big.Int).Add(taux1, new(big.Int).Add(taux2, taux3)), EC.N)
+
+	rpresult.Tau = taux
+
+	mu := new(big.Int).Mod(new(big.Int).Add(alpha, new(big.Int).Mul(rho, cx)), EC.N)
+	rpresult.Mu = mu
+
+	rpresult.L = left
+	rpresult.R = right
+
+	return nil
+}
+
 func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 
 	rpresult := RangeProof{}
@@ -283,6 +475,18 @@ func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 	return rpresult
 }
 
+func expand(v []*big.Int) []*big.Int {
+	n := len(EC.BPG)
+	repeat := n / len(v)
+	r := make([]*big.Int, n)
+	for i, e := range v {
+		for j := 0; j < repeat; j++ {
+			r[i * repeat + j] = e
+		}
+	}
+	return r
+}
+
 func RPVerify(rp RangeProof) bool {
 	// verify the challenges
 	var cx, cy, cz *big.Int
@@ -382,6 +586,12 @@ func RPVerify(rp RangeProof) bool {
 	}
 
 	PowerOfTwos := PowerVector(EC.V, big.NewInt(2))
+	// @@ MPC
+	if len(PowerOfTwos) != len(EC.BPG) {
+		PowersOfY = expand(PowersOfY)
+		PowerOfTwos = expand(PowerOfTwos)
+	}
+	// @@@
 	tmp2 := EC.Zero()
 	// generate h'
 	HPrime := make([]ECPoint, len(EC.BPH))

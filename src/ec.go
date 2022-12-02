@@ -25,6 +25,9 @@ func (p ECPoint) Mult(s *big.Int) ECPoint {
 
 // Add adds points p and p2 and returns the resulting point
 func (p ECPoint) Add(p2 ECPoint) ECPoint {
+	if (p.X == nil || p.Y == nil) {
+		return p2
+	}
 	X, Y := EC.C.Add(p.X, p.Y, p2.X, p2.Y)
 	return ECPoint{X, Y}
 }
@@ -34,4 +37,8 @@ func (p ECPoint) Neg() ECPoint {
 	negY := new(big.Int).Neg(p.Y)
 	modValue := negY.Mod(negY, EC.C.Params().P) // mod P is fine here because we're describing a curve point
 	return ECPoint{p.X, modValue}
+}
+
+func (p ECPoint) Sub(p2 ECPoint) ECPoint {
+	return p.Add(p2.Neg())
 }
