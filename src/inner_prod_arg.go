@@ -204,13 +204,18 @@ func InnerProductVerifyFast(c *big.Int, P, U ECPoint, G, H []ECPoint, ipp InnerP
 	s1 := sha256.Sum256([]byte(P.X.String() + P.Y.String()))
 	chal1 := new(big.Int).SetBytes(s1[:])
 	ux := U.Mult(chal1)
-	curIt := len(ipp.Challenges) - 1
+	// curIt := len(ipp.Challenges) - 1
+	curIt := len(ipp.L)
 
 	// check all challenges
+	/* @@
 	if ipp.Challenges[curIt].Cmp(chal1) != 0 {
 		fmt.Println("IPVerify - Initial Challenge Failed")
 		return false
 	}
+	*/
+	ipp.Challenges = make([]*big.Int, curIt + 1)
+	ipp.Challenges[curIt] = chal1
 
 	for j := curIt - 1; j >= 0; j-- {
 		Lval := ipp.L[j]
@@ -223,10 +228,13 @@ func InnerProductVerifyFast(c *big.Int, P, U ECPoint, G, H []ECPoint, ipp InnerP
 
 		chal2 := new(big.Int).SetBytes(s256[:])
 
+		/* @@ 
 		if ipp.Challenges[j].Cmp(chal2) != 0 {
 			fmt.Println("IPVerify - Challenge verification failed at index " + strconv.Itoa(j))
 			return false
 		}
+		*/
+		ipp.Challenges[j] = chal2	// @@
 	}
 	// begin computing
 
@@ -243,10 +251,11 @@ func InnerProductVerifyFast(c *big.Int, P, U ECPoint, G, H []ECPoint, ipp InnerP
 	}
 	rhs := Pprime.Add(tmp1)
 
-	sScalars := make([]*big.Int, EC.V)
-	invsScalars := make([]*big.Int, EC.V)
+	n := len(G)	// MPC
+	sScalars := make([]*big.Int, n)
+	invsScalars := make([]*big.Int, n)
 
-	for i := 0; i < EC.V; i++ {
+	for i := 0; i < n; i++ {
 		si := big.NewInt(1)
 		for j := curIt; j >= 0; j-- {
 			// original challenge if the jth bit of i is 1, inverse challenge otherwise

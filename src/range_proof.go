@@ -19,6 +19,8 @@ type RangeProof struct {
 	IPP  InnerProdArg
 	L    []*big.Int
 	R    []*big.Int
+	Factor int
+	LR   *big.Int	// <l,r>, might be different than Th (t^) in the case of MPC
 
 	// challenges
 	Cy *big.Int
@@ -281,6 +283,42 @@ func RPProveStep2(ctx *MPRangeContext, rpresult *RangeProof, gamma *big.Int) err
 	return nil
 }
 
+func padding(l, r []*big.Int, G, H []ECPoint) ([]*big.Int, []*big.Int, []ECPoint, []ECPoint) {
+	power := 1
+	for power < len(G) {
+		power *= 2
+	}
+	if (len(G) < power) {	// padding to 2^n
+		for i := power - len(G); i > 0; i-- {
+			l = append(l, big.NewInt(0))
+			r = append(r, big.NewInt(0))
+			G = append(G, ECPoint{big.NewInt(0), big.NewInt(0)})
+			H = append(H, ECPoint{big.NewInt(0), big.NewInt(0)})
+		}
+	}
+	return l, r, G, H
+}
+
+func RPProveStep3(rpresult *RangeProof) error {
+	PowersOfY := expand(PowerVector(EC.V, rpresult.Cy))
+	HPrime := make([]ECPoint, len(EC.BPH))
+
+	for i := range HPrime {
+		HPrime[i] = EC.BPH[i].Mult(new(big.Int).ModInverse(PowersOfY[i], EC.N))
+	}
+
+	P := TwoVectorPCommitWithGens(EC.BPG, HPrime, rpresult.L, rpresult.R)
+
+	G := EC.BPG
+	left := rpresult.L
+	right := rpresult.R
+
+	left, right, G, HPrime = padding(left, right, G, HPrime)
+	rpresult.IPP = InnerProductProve(left, right, rpresult.Th, P, EC.U, G, HPrime)
+
+	return nil
+}
+
 func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 
 	rpresult := RangeProof{}
@@ -427,6 +465,7 @@ func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 	}
 
 	rpresult.Th = thatPrime
+	rpresult.Factor = 1
 
 	taux1 := new(big.Int).Mod(new(big.Int).Mul(tau2, new(big.Int).Mul(cx, cx)), EC.N)
 	taux2 := new(big.Int).Mod(new(big.Int).Mul(tau1, cx), EC.N)
@@ -470,7 +509,9 @@ func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 	//fmt.Println(P1)
 	//fmt.Println(P2)
 
-	rpresult.IPP = InnerProductProve(left, right, that, P, EC.U, EC.BPG, HPrime)
+	G := EC.BPG
+	left, right, G, HPrime = padding(left, right, G, HPrime)
+	rpresult.IPP = InnerProductProve(left, right, that, P, EC.U, G, HPrime)
 
 	return rpresult
 }
@@ -567,8 +608,16 @@ func RPVerify(rp RangeProof) bool {
 	lhs := EC.G.Mult(rp.Th).Add(EC.H.Mult(rp.Tau))
 
 	// z^2 * V + delta(y,z) * G + x * T1 + x^2 * T2
+	delta := Delta(PowersOfY, cz)
+	delta.Mul(delta, big.NewInt(int64(rp.Factor)))
+	/*
+	if delta.Cmp(big.NewInt(0)) < 0 {
+		for delta.Add(delta, EC.N).Cmp(big.NewInt(0)) < 0 {
+		}
+	}
+	*/
 	rhs := rp.Comm.Mult(new(big.Int).Mul(cz, cz)).Add(
-		EC.G.Mult(Delta(PowersOfY, cz))).Add(
+		EC.G.Mult(delta)).Add(
 		rp.T1.Mult(cx)).Add(
 		rp.T2.Mult(new(big.Int).Mul(cx, cx)))
 
@@ -604,7 +653,8 @@ func RPVerify(rp RangeProof) bool {
 	for i := range HPrime {
 		val1 := new(big.Int).Mul(cz, PowersOfY[i])
 		val2 := new(big.Int).Mul(new(big.Int).Mul(cz, cz), PowerOfTwos[i])
-		tmp2 = tmp2.Add(HPrime[i].Mult(new(big.Int).Add(val1, val2)))
+		val3 := new(big.Int).Add(val1, val2)
+		tmp2 = tmp2.Add(HPrime[i].Mult(val3))
 	}
 
 	// without subtracting this value should equal muCH + l[i]G[i] + r[i]H'[i]
@@ -613,10 +663,18 @@ func RPVerify(rp RangeProof) bool {
 	//fmt.Println(P)
 
 	var result bool
-	if rp.L != nil && rp.R != nil {
+	if rp.IPP.A != nil {
+		var th *big.Int
+		if rp.LR != nil {
+			th = rp.LR
+		} else {
+			th = rp.Th
+		}
+		result = InnerProductVerifyFast(th, P, EC.U, EC.BPG, HPrime, rp.IPP)
+	} else if rp.L != nil && rp.R != nil {
 		result = P.Equal(TwoVectorPCommitWithGens(EC.BPG, HPrime, rp.L, rp.R))
 	} else {
-		result = InnerProductVerifyFast(rp.Th, P, EC.U, EC.BPG, HPrime, rp.IPP)
+		fmt.Println("No proof!")
 	}
 	if !result {
 		fmt.Println("RPVerify - Uh oh! Check line (65) of verification!")

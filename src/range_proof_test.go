@@ -8,7 +8,7 @@ import (
 )
 
 const NBITS = 20
-const uncompress = true
+const uncompress = false
 
 func TestRPVerify1(t *testing.T) {
 	EC = NewECPrimeGroupKey(NBITS)
