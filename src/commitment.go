@@ -12,7 +12,7 @@ Vector Pedersen Commitment
 Given an array of values, we commit the array with different generators
 for each element and for each randomness.
 */
-func VectorPCommit(value []*big.Int) (ECPoint, []*big.Int) {
+func (EC *CryptoParams) VectorPCommit(value []*big.Int) (ECPoint, []*big.Int) {
 	R := make([]*big.Int, EC.V)
 
 	commitment := EC.Zero()
@@ -29,7 +29,7 @@ func VectorPCommit(value []*big.Int) (ECPoint, []*big.Int) {
 		lhsX, lhsY := EC.C.ScalarMult(EC.BPG[i].X, EC.BPG[i].Y, modValue.Bytes())
 		rhsX, rhsY := EC.C.ScalarMult(EC.BPH[i].X, EC.BPH[i].Y, r.Bytes())
 
-		commitment = commitment.Add(ECPoint{lhsX, lhsY}).Add(ECPoint{rhsX, rhsY})
+		commitment = commitment.Add(NewECPoint(lhsX, lhsY)).Add(NewECPoint(rhsX, rhsY))
 	}
 
 	return commitment, R
@@ -41,7 +41,7 @@ Two Vector P Commit
 Given an array of values, we commit the array with different generators
 for each element and for each randomness.
 */
-func TwoVectorPCommit(a []*big.Int, b []*big.Int) ECPoint {
+func (EC *CryptoParams) TwoVectorPCommit(a []*big.Int, b []*big.Int) ECPoint {
 	if len(a) != len(b) {
 		fmt.Println("TwoVectorPCommit: Uh oh! Arrays not of the same length")
 		fmt.Printf("len(a): %d\n", len(a))
@@ -65,7 +65,7 @@ for each element and for each randomness.
 
 We also pass in the Generators we want to use
 */
-func TwoVectorPCommitWithGens(G, H []ECPoint, a, b []*big.Int) ECPoint {
+func (EC *CryptoParams) TwoVectorPCommitWithGens(G, H []ECPoint, a, b []*big.Int) ECPoint {
 	if len(G) != len(H) || len(G) != len(a) || len(a) != len(b) {
 		fmt.Println("TwoVectorPCommitWithGens: Uh oh! Arrays not of the same length")
 		fmt.Printf("len(G): %d\n", len(G))

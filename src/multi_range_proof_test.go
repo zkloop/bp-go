@@ -8,14 +8,14 @@ import (
 
 func TestMultiRPVerify1(t *testing.T) {
 	values := []*big.Int{big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)}
-	EC = NewECPrimeGroupKey(64 * len(values))
+	EC := NewECPrimeGroupKey(64 * len(values))
 	// Testing smallest number in range
-	proof := MRPProve(values)
+	proof := MRPProve(EC, values)
 	proofString := fmt.Sprintf("%s", proof)
 
 	fmt.Println(len(proofString)) // length is good measure of bytes, correct?
 
-	if MRPVerify(proof) {
+	if MRPVerify(EC, proof) {
 		fmt.Println("Multi Range Proof Verification works")
 	} else {
 		t.Error("***** Multi Range Proof FAILURE")
@@ -24,9 +24,9 @@ func TestMultiRPVerify1(t *testing.T) {
 
 func TestMultiRPVerify2(t *testing.T) {
 	values := []*big.Int{big.NewInt(0)}
-	EC = NewECPrimeGroupKey(64 * len(values))
+	EC := NewECPrimeGroupKey(64 * len(values))
 	// Testing smallest number in range
-	if MRPVerify(MRPProve(values)) {
+	if MRPVerify(EC, MRPProve(EC, values)) {
 		fmt.Println("Multi Range Proof Verification works")
 	} else {
 		t.Error("***** Multi Range Proof FAILURE")
@@ -35,9 +35,9 @@ func TestMultiRPVerify2(t *testing.T) {
 
 func TestMultiRPVerify3(t *testing.T) {
 	values := []*big.Int{big.NewInt(0), big.NewInt(1)}
-	EC = NewECPrimeGroupKey(64 * len(values))
+	EC := NewECPrimeGroupKey(64 * len(values))
 	// Testing smallest number in range
-	if MRPVerify(MRPProve(values)) {
+	if MRPVerify(EC, MRPProve(EC, values)) {
 		fmt.Println("Multi Range Proof Verification works")
 	} else {
 		t.Error("***** Multi Range Proof FAILURE")
@@ -51,14 +51,14 @@ func TestMultiRPVerify4(t *testing.T) {
 			values[k] = big.NewInt(0)
 		}
 
-		EC = NewECPrimeGroupKey(64 * len(values))
+		EC := NewECPrimeGroupKey(64 * len(values))
 		// Testing smallest number in range
-		proof := MRPProve(values)
+		proof := MRPProve(EC, values)
 		proofString := fmt.Sprintf("%s", proof)
 
 		fmt.Println(len(proofString)) // length is good measure of bytes, correct?
 
-		if MRPVerify(proof) {
+		if MRPVerify(EC, proof) {
 			fmt.Println("Multi Range Proof Verification works")
 		} else {
 			t.Error("***** Multi Range Proof FAILURE")

@@ -8,7 +8,7 @@ import (
 
 func TestInnerProductProveLen1(t *testing.T) {
 	fmt.Println("TestInnerProductProve1")
-	EC = NewECPrimeGroupKey(1)
+	EC := NewECPrimeGroupKey(1)
 	a := make([]*big.Int, 1)
 	b := make([]*big.Int, 1)
 
@@ -16,13 +16,13 @@ func TestInnerProductProveLen1(t *testing.T) {
 
 	b[0] = big.NewInt(2)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerify(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerify(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -31,7 +31,7 @@ func TestInnerProductProveLen1(t *testing.T) {
 
 func TestInnerProductProveLen2(t *testing.T) {
 	fmt.Println("TestInnerProductProve2")
-	EC = NewECPrimeGroupKey(2)
+	EC := NewECPrimeGroupKey(2)
 	a := make([]*big.Int, 2)
 	b := make([]*big.Int, 2)
 
@@ -41,13 +41,13 @@ func TestInnerProductProveLen2(t *testing.T) {
 	b[0] = big.NewInt(2)
 	b[1] = big.NewInt(3)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerify(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerify(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -56,7 +56,7 @@ func TestInnerProductProveLen2(t *testing.T) {
 
 func TestInnerProductProveLen4(t *testing.T) {
 	fmt.Println("TestInnerProductProve4")
-	EC = NewECPrimeGroupKey(4)
+	EC := NewECPrimeGroupKey(4)
 	a := make([]*big.Int, 4)
 	b := make([]*big.Int, 4)
 
@@ -70,13 +70,13 @@ func TestInnerProductProveLen4(t *testing.T) {
 	b[2] = big.NewInt(1)
 	b[3] = big.NewInt(1)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerify(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerify(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -85,7 +85,7 @@ func TestInnerProductProveLen4(t *testing.T) {
 
 func TestInnerProductProveLen8(t *testing.T) {
 	fmt.Println("TestInnerProductProve8")
-	EC = NewECPrimeGroupKey(8)
+	EC := NewECPrimeGroupKey(8)
 	a := make([]*big.Int, 8)
 	b := make([]*big.Int, 8)
 
@@ -107,13 +107,13 @@ func TestInnerProductProveLen8(t *testing.T) {
 	b[6] = big.NewInt(2)
 	b[7] = big.NewInt(2)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerify(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerify(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -122,17 +122,17 @@ func TestInnerProductProveLen8(t *testing.T) {
 
 func TestInnerProductProveLen64Rand(t *testing.T) {
 	fmt.Println("TestInnerProductProveLen64Rand")
-	EC = NewECPrimeGroupKey(64)
-	a := RandVector(64)
-	b := RandVector(64)
+	EC := NewECPrimeGroupKey(64)
+	a := RandVector(64, EC.N)
+	b := RandVector(64, EC.N)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerify(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerify(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -143,7 +143,7 @@ func TestInnerProductProveLen64Rand(t *testing.T) {
 
 func TestInnerProductVerifyFastLen1(t *testing.T) {
 	fmt.Println("TestInnerProductProve1")
-	EC = NewECPrimeGroupKey(1)
+	EC := NewECPrimeGroupKey(1)
 	a := make([]*big.Int, 1)
 	b := make([]*big.Int, 1)
 
@@ -151,13 +151,13 @@ func TestInnerProductVerifyFastLen1(t *testing.T) {
 
 	b[0] = big.NewInt(2)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerifyFast(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerifyFast(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -166,7 +166,7 @@ func TestInnerProductVerifyFastLen1(t *testing.T) {
 
 func TestInnerProductVerifyFastLen2(t *testing.T) {
 	fmt.Println("TestInnerProductProve2")
-	EC = NewECPrimeGroupKey(2)
+	EC := NewECPrimeGroupKey(2)
 	a := make([]*big.Int, 2)
 	b := make([]*big.Int, 2)
 
@@ -176,13 +176,13 @@ func TestInnerProductVerifyFastLen2(t *testing.T) {
 	b[0] = big.NewInt(2)
 	b[1] = big.NewInt(3)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerifyFast(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerifyFast(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -191,7 +191,7 @@ func TestInnerProductVerifyFastLen2(t *testing.T) {
 
 func TestInnerProductVerifyFastLen4(t *testing.T) {
 	fmt.Println("TestInnerProductProve4")
-	EC = NewECPrimeGroupKey(4)
+	EC := NewECPrimeGroupKey(4)
 	a := make([]*big.Int, 4)
 	b := make([]*big.Int, 4)
 
@@ -205,13 +205,13 @@ func TestInnerProductVerifyFastLen4(t *testing.T) {
 	b[2] = big.NewInt(1)
 	b[3] = big.NewInt(1)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerifyFast(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerifyFast(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -220,7 +220,7 @@ func TestInnerProductVerifyFastLen4(t *testing.T) {
 
 func TestInnerProductVerifyFastLen8(t *testing.T) {
 	fmt.Println("TestInnerProductProve8")
-	EC = NewECPrimeGroupKey(8)
+	EC := NewECPrimeGroupKey(8)
 	a := make([]*big.Int, 8)
 	b := make([]*big.Int, 8)
 
@@ -242,13 +242,13 @@ func TestInnerProductVerifyFastLen8(t *testing.T) {
 	b[6] = big.NewInt(2)
 	b[7] = big.NewInt(2)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerifyFast(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerifyFast(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")
@@ -257,17 +257,17 @@ func TestInnerProductVerifyFastLen8(t *testing.T) {
 
 func TestInnerProductVerifyFastLen64Rand(t *testing.T) {
 	fmt.Println("TestInnerProductProveLen64Rand")
-	EC = NewECPrimeGroupKey(64)
-	a := RandVector(64)
-	b := RandVector(64)
+	EC := NewECPrimeGroupKey(64)
+	a := RandVector(64, EC.N)
+	b := RandVector(64, EC.N)
 
-	c := InnerProduct(a, b)
+	c := InnerProduct(a, b, EC.N)
 
-	P := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, a, b)
 
-	ipp := InnerProductProve(a, b, c, P, EC.U, EC.BPG, EC.BPH)
+	ipp := InnerProductProve(EC, a, b, c, P, EC.U, EC.BPG, EC.BPH)
 
-	if InnerProductVerifyFast(c, P, EC.U, EC.BPG, EC.BPH, ipp) {
+	if InnerProductVerifyFast(EC, c, P, EC.U, EC.BPG, EC.BPH, ipp) {
 		fmt.Println("Inner Product Proof correct")
 	} else {
 		t.Error("Inner Product Proof incorrect")

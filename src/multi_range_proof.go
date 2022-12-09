@@ -25,18 +25,18 @@ type MultiRangeProof struct {
 }
 
 // Calculates (aL - z*1^n) + sL*x
-func CalculateLMRP(aL, sL []*big.Int, z, x *big.Int) []*big.Int {
+func CalculateLMRP(EC *CryptoParams, aL, sL []*big.Int, z, x *big.Int) []*big.Int {
 	result := make([]*big.Int, len(aL))
 
-	tmp1 := VectorAddScalar(aL, new(big.Int).Neg(z))
-	tmp2 := ScalarVectorMul(sL, x)
+	tmp1 := VectorAddScalar(aL, new(big.Int).Neg(z), EC.N)
+	tmp2 := ScalarVectorMul(sL, x, EC.N)
 
-	result = VectorAdd(tmp1, tmp2)
+	result = VectorAdd(tmp1, tmp2, EC.N)
 
 	return result
 }
 
-func CalculateRMRP(aR, sR, y, zTimesTwo []*big.Int, z, x *big.Int) []*big.Int {
+func CalculateRMRP(EC *CryptoParams, aR, sR, y, zTimesTwo []*big.Int, z, x *big.Int) []*big.Int {
 	if len(aR) != len(sR) || len(aR) != len(y) || len(y) != len(zTimesTwo) {
 		fmt.Println("CalculateR: Uh oh! Arrays not of the same length")
 		fmt.Printf("len(aR): %d\n", len(aR))
@@ -47,11 +47,11 @@ func CalculateRMRP(aR, sR, y, zTimesTwo []*big.Int, z, x *big.Int) []*big.Int {
 
 	result := make([]*big.Int, len(aR))
 
-	tmp11 := VectorAddScalar(aR, z)
-	tmp12 := ScalarVectorMul(sR, x)
-	tmp1 := VectorHadamard(y, VectorAdd(tmp11, tmp12))
+	tmp11 := VectorAddScalar(aR, z, EC.N)
+	tmp12 := ScalarVectorMul(sR, x, EC.N)
+	tmp1 := VectorHadamard(y, VectorAdd(tmp11, tmp12, EC.N), EC.N)
 
-	result = VectorAdd(tmp1, zTimesTwo)
+	result = VectorAdd(tmp1, zTimesTwo, EC.N)
 
 	return result
 }
@@ -62,13 +62,13 @@ DeltaMRP is a helper function that is used in the multi range proof
 \delta(y, z) = (z-z^2)<1^n, y^n> - \sum_j z^3+j<1^n, 2^n>
 */
 
-func DeltaMRP(y []*big.Int, z *big.Int, m int) *big.Int {
+func DeltaMRP(EC *CryptoParams, y []*big.Int, z *big.Int, m int) *big.Int {
 	result := big.NewInt(0)
 
 	// (z-z^2)<1^n, y^n>
 	z2 := new(big.Int).Mod(new(big.Int).Mul(z, z), EC.N)
 	t1 := new(big.Int).Mod(new(big.Int).Sub(z, z2), EC.N)
-	t2 := new(big.Int).Mod(new(big.Int).Mul(t1, VectorSum(y)), EC.N)
+	t2 := new(big.Int).Mod(new(big.Int).Mul(t1, VectorSum(y, EC.N)), EC.N)
 
 	// \sum_j z^3+j<1^n, 2^n>
 	// <1^n, 2^n> = 2^n - 1
@@ -100,7 +100,7 @@ changes:
 {(g, h \in G, \textbf{V} \in G^m ; \textbf{v, \gamma} \in Z_p^m) :
 	V_j = h^{\gamma_j}g^{v_j} \wedge v_j \in [0, 2^n - 1] \forall j \in [1, m]}
 */
-func MRPProve(values []*big.Int) MultiRangeProof {
+func MRPProve(EC *CryptoParams, values []*big.Int) MultiRangeProof {
 	// EC.V has the total number of values and bits we can support
 
 	MRPResult := MultiRangeProof{}
@@ -110,7 +110,7 @@ func MRPProve(values []*big.Int) MultiRangeProof {
 
 	// we concatenate the binary representation of the values
 
-	PowerOfTwos := PowerVector(bitsPerValue, big.NewInt(2))
+	PowerOfTwos := PowerVector(bitsPerValue, big.NewInt(2), EC.N)
 
 	Comms := make([]ECPoint, m)
 	gammas := make([]*big.Int, m)
@@ -134,7 +134,7 @@ func MRPProve(values []*big.Int) MultiRangeProof {
 
 		// break up v into its bitwise representation
 		aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", bitsPerValue)))
-		aR := VectorAddScalar(aL, big.NewInt(-1))
+		aR := VectorAddScalar(aL, big.NewInt(-1), EC.N)
 
 		for i := range aR {
 			aLConcat[bitsPerValue*j+i] = aL[i]
@@ -147,16 +147,16 @@ func MRPProve(values []*big.Int) MultiRangeProof {
 	alpha, err := rand.Int(rand.Reader, EC.N)
 	check(err)
 
-	A := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aLConcat, aRConcat).Add(EC.H.Mult(alpha))
+	A := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aLConcat, aRConcat).Add(EC.H.Mult(alpha))
 	MRPResult.A = A
 
-	sL := RandVector(EC.V)
-	sR := RandVector(EC.V)
+	sL := RandVector(EC.V, EC.N)
+	sR := RandVector(EC.V, EC.N)
 
 	rho, err := rand.Int(rand.Reader, EC.N)
 	check(err)
 
-	S := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, sL, sR).Add(EC.H.Mult(rho))
+	S := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, sL, sR).Add(EC.H.Mult(rho))
 	MRPResult.S = S
 
 	chal1s256 := sha256.Sum256([]byte(A.X.String() + A.Y.String()))
@@ -199,21 +199,21 @@ func MRPProve(values []*big.Int) MultiRangeProof {
 				FieldVectorPolynomial rPoly = new FieldVectorPolynomial(r0, r1);
 
 	*/
-	PowerOfCY := PowerVector(EC.V, cy)
+	PowerOfCY := PowerVector(EC.V, cy, EC.N)
 	// fmt.Println(PowerOfCY)
-	l0 := VectorAddScalar(aLConcat, new(big.Int).Neg(cz))
+	l0 := VectorAddScalar(aLConcat, new(big.Int).Neg(cz), EC.N)
 	l1 := sL
 	r0 := VectorAdd(
 		VectorHadamard(
 			PowerOfCY,
-			VectorAddScalar(aRConcat, cz)),
-		zPowersTimesTwoVec)
-	r1 := VectorHadamard(sR, PowerOfCY)
+			VectorAddScalar(aRConcat, cz, EC.N), EC.N),
+		zPowersTimesTwoVec, EC.N)
+	r1 := VectorHadamard(sR, PowerOfCY, EC.N)
 
 	//calculate t0
 	vz2 := big.NewInt(0)
 	z2 := new(big.Int).Mod(new(big.Int).Mul(cz, cz), EC.N)
-	PowerOfCZ := PowerVector(m, cz)
+	PowerOfCZ := PowerVector(m, cz, EC.N)
 	for j := 0; j < m; j++ {
 		vz2 = new(big.Int).Add(vz2,
 			new(big.Int).Mul(
@@ -222,10 +222,10 @@ func MRPProve(values []*big.Int) MultiRangeProof {
 		vz2 = new(big.Int).Mod(vz2, EC.N)
 	}
 
-	t0 := new(big.Int).Mod(new(big.Int).Add(vz2, DeltaMRP(PowerOfCY, cz, m)), EC.N)
+	t0 := new(big.Int).Mod(new(big.Int).Add(vz2, DeltaMRP(EC, PowerOfCY, cz, m)), EC.N)
 
-	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(l1, r0), InnerProduct(l0, r1)), EC.N)
-	t2 := InnerProduct(l1, r1)
+	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(l1, r0, EC.N), InnerProduct(l0, r1, EC.N)), EC.N)
+	t2 := InnerProduct(l1, r1, EC.N)
 
 	// given the t_i values, we can generate commitments to them
 	tau1, err := rand.Int(rand.Reader, EC.N)
@@ -244,13 +244,13 @@ func MRPProve(values []*big.Int) MultiRangeProof {
 
 	MRPResult.Cx = cx
 
-	left := CalculateLMRP(aLConcat, sL, cz, cx)
-	right := CalculateRMRP(aRConcat, sR, PowerOfCY, zPowersTimesTwoVec, cz, cx)
+	left := CalculateLMRP(EC, aLConcat, sL, cz, cx)
+	right := CalculateRMRP(EC, aRConcat, sR, PowerOfCY, zPowersTimesTwoVec, cz, cx)
 
 	thatPrime := new(big.Int).Mod( // t0 + t1*x + t2*x^2
 		new(big.Int).Add(t0, new(big.Int).Add(new(big.Int).Mul(t1, cx), new(big.Int).Mul(new(big.Int).Mul(cx, cx), t2))), EC.N)
 
-	that := InnerProduct(left, right) // NOTE: BP Java implementation calculates this from the t_i
+	that := InnerProduct(left, right, EC.N) // NOTE: BP Java implementation calculates this from the t_i
 
 	// thatPrime and that should be equal
 	if thatPrime.Cmp(that) != 0 {
@@ -283,10 +283,10 @@ func MRPProve(values []*big.Int) MultiRangeProof {
 		HPrime[i] = EC.BPH[i].Mult(new(big.Int).ModInverse(PowerOfCY[i], EC.N))
 	}
 
-	P := TwoVectorPCommitWithGens(EC.BPG, HPrime, left, right)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, HPrime, left, right)
 	//fmt.Println(P)
 
-	MRPResult.IPP = InnerProductProve(left, right, that, P, EC.U, EC.BPG, HPrime)
+	MRPResult.IPP = InnerProductProve(EC, left, right, that, P, EC.U, EC.BPG, HPrime)
 
 	return MRPResult
 }
@@ -296,7 +296,7 @@ MultiRangeProof Verify
 Takes in a MultiRangeProof and verifies its correctness
 
 */
-func MRPVerify(mrp MultiRangeProof) bool {
+func MRPVerify(EC *CryptoParams, mrp MultiRangeProof) bool {
 	m := len(mrp.Comms)
 	bitsPerValue := EC.V / m
 
@@ -325,21 +325,21 @@ func MRPVerify(mrp MultiRangeProof) bool {
 	}
 
 	// given challenges are correct, very range proof
-	PowersOfY := PowerVector(EC.V, cy)
+	PowersOfY := PowerVector(EC.V, cy, EC.N)
 
 	// t_hat * G + tau * H
 	lhs := EC.G.Mult(mrp.Th).Add(EC.H.Mult(mrp.Tau))
 
 	// z^2 * \bold{z}^m \bold{V} + delta(y,z) * G + x * T1 + x^2 * T2
 	CommPowers := EC.Zero()
-	PowersOfZ := PowerVector(m, cz)
+	PowersOfZ := PowerVector(m, cz, EC.N)
 	z2 := new(big.Int).Mod(new(big.Int).Mul(cz, cz), EC.N)
 
 	for j := 0; j < m; j++ {
 		CommPowers = CommPowers.Add(mrp.Comms[j].Mult(new(big.Int).Mul(z2, PowersOfZ[j])))
 	}
 
-	rhs := EC.G.Mult(DeltaMRP(PowersOfY, cz, m)).Add(
+	rhs := EC.G.Mult(DeltaMRP(EC, PowersOfY, cz, m)).Add(
 		mrp.T1.Mult(cx)).Add(
 		mrp.T2.Mult(new(big.Int).Mul(cx, cx))).Add(CommPowers)
 
@@ -356,7 +356,7 @@ func MRPVerify(mrp MultiRangeProof) bool {
 		tmp1 = tmp1.Add(EC.BPG[i].Mult(zneg))
 	}
 
-	PowerOfTwos := PowerVector(bitsPerValue, big.NewInt(2))
+	PowerOfTwos := PowerVector(bitsPerValue, big.NewInt(2), EC.N)
 	tmp2 := EC.Zero()
 	// generate h'
 	HPrime := make([]ECPoint, len(EC.BPH))
@@ -380,7 +380,7 @@ func MRPVerify(mrp MultiRangeProof) bool {
 	P := mrp.A.Add(mrp.S.Mult(cx)).Add(tmp1).Add(tmp2).Add(EC.H.Mult(mrp.Mu).Neg())
 	//fmt.Println(P)
 
-	if !InnerProductVerifyFast(mrp.Th, P, EC.U, EC.BPG, HPrime, mrp.IPP) {
+	if !InnerProductVerifyFast(EC, mrp.Th, P, EC.U, EC.BPG, HPrime, mrp.IPP) {
 		fmt.Println("MRPVerify - Uh oh! Check line (65) of verification!")
 		return false
 	}

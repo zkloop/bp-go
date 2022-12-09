@@ -13,7 +13,7 @@ import (
 	btcec "github.com/btcsuite/btcd/btcec/v2" 
 )
 
-var VecLength = 64
+// var VecLength = 64
 
 type CryptoParams struct {
 	C   elliptic.Curve      // curve
@@ -28,7 +28,7 @@ type CryptoParams struct {
 }
 
 func (c CryptoParams) Zero() ECPoint {
-	return ECPoint{big.NewInt(0), big.NewInt(0)}
+	return NewECPoint(big.NewInt(0), big.NewInt(0))
 }
 
 func check(e error) {
@@ -39,12 +39,12 @@ func check(e error) {
 
 // NewECPrimeGroupKey returns the curve (field),
 // Generator 1 x&y, Generator 2 x&y, order of the generators
-func NewECPrimeGroupKey(n int) CryptoParams {
+func NewECPrimeGroupKey(n int) *CryptoParams {
 	curValue := btcec.S256().Gx
 	s256 := sha256.New()
 	gen1Vals := make([]ECPoint, n)
 	gen2Vals := make([]ECPoint, n)
-	u := ECPoint{big.NewInt(0), big.NewInt(0)}
+	u := NewECPoint(big.NewInt(0), big.NewInt(0))
 	cg := ECPoint{}
 	ch := ECPoint{}
 
@@ -62,19 +62,19 @@ func NewECPrimeGroupKey(n int) CryptoParams {
 		gen2, err := btcec.ParsePubKey(potentialXValue)
 		if err == nil {
 			if confirmed == 2*n { // once we've generated all g and h values then assign this to u
-				u = ECPoint{gen2.X(), gen2.Y()}
+				u = NewECPoint(gen2.X(), gen2.Y())
 				//fmt.Println("Got that U value")
 			} else if confirmed == 2*n+1 {
-				cg = ECPoint{gen2.X(), gen2.Y()}
+				cg = NewECPoint(gen2.X(), gen2.Y())
 
 			} else if confirmed == 2*n+2 {
-				ch = ECPoint{gen2.X(), gen2.Y()}
+				ch = NewECPoint(gen2.X(), gen2.Y())
 			} else {
 				if confirmed%2 == 0 {
-					gen1Vals[confirmed/2] = ECPoint{gen2.X(), gen2.Y()}
+					gen1Vals[confirmed/2] = NewECPoint(gen2.X(), gen2.Y())
 					//fmt.Println("new G Value")
 				} else {
-					gen2Vals[confirmed/2] = ECPoint{gen2.X(), gen2.Y()}
+					gen2Vals[confirmed/2] = NewECPoint(gen2.X(), gen2.Y())
 					//fmt.Println("new H value")
 				}
 			}
@@ -83,7 +83,7 @@ func NewECPrimeGroupKey(n int) CryptoParams {
 		j += 1
 	}
 
-	return CryptoParams{
+	return &CryptoParams{
 		btcec.S256(),
 		btcec.S256(),
 		gen1Vals,
@@ -96,6 +96,6 @@ func NewECPrimeGroupKey(n int) CryptoParams {
 }
 
 func init() {
-	EC = NewECPrimeGroupKey(VecLength)
+	// EC = NewECPrimeGroupKey(VecLength)
 	//fmt.Println(EC)
 }

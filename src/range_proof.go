@@ -34,13 +34,13 @@ Delta is a helper function that is used in the range proof
 \delta(y, z) = (z-z^2)<1^n, y^n> - z^3<1^n, 2^n>
 */
 
-func Delta(y []*big.Int, z *big.Int) *big.Int {
+func Delta(EC *CryptoParams, y []*big.Int, z *big.Int) *big.Int {
 	result := big.NewInt(0)
 
 	// (z-z^2)<1^n, y^n>
 	z2 := new(big.Int).Mod(new(big.Int).Mul(z, z), EC.N)
 	t1 := new(big.Int).Mod(new(big.Int).Sub(z, z2), EC.N)
-	t2 := new(big.Int).Mod(new(big.Int).Mul(t1, VectorSum(y)), EC.N)
+	t2 := new(big.Int).Mod(new(big.Int).Mul(t1, VectorSum(y, EC.N)), EC.N)
 
 	// z^3<1^n, 2^n>
 	z3 := new(big.Int).Mod(new(big.Int).Mul(z2, z), EC.N)
@@ -53,18 +53,18 @@ func Delta(y []*big.Int, z *big.Int) *big.Int {
 }
 
 // Calculates (aL - z*1^n) + sL*x
-func CalculateL(aL, sL []*big.Int, z, x *big.Int) []*big.Int {
+func CalculateL(EC *CryptoParams, aL, sL []*big.Int, z, x *big.Int) []*big.Int {
 	result := make([]*big.Int, len(aL))
 
-	tmp1 := VectorAddScalar(aL, new(big.Int).Neg(z))
-	tmp2 := ScalarVectorMul(sL, x)
+	tmp1 := VectorAddScalar(aL, new(big.Int).Neg(z), EC.N)
+	tmp2 := ScalarVectorMul(sL, x, EC.N)
 
-	result = VectorAdd(tmp1, tmp2)
+	result = VectorAdd(tmp1, tmp2, EC.N)
 
 	return result
 }
 
-func CalculateR(aR, sR, y, po2 []*big.Int, z, x *big.Int) []*big.Int {
+func CalculateR(EC *CryptoParams, aR, sR, y, po2 []*big.Int, z, x *big.Int) []*big.Int {
 	if len(aR) != len(sR) || len(aR) != len(y) || len(y) != len(po2) {
 		fmt.Println("CalculateR: Uh oh! Arrays not of the same length")
 		fmt.Printf("len(aR): %d\n", len(aR))
@@ -76,12 +76,12 @@ func CalculateR(aR, sR, y, po2 []*big.Int, z, x *big.Int) []*big.Int {
 	result := make([]*big.Int, len(aR))
 
 	z2 := new(big.Int).Exp(z, big.NewInt(2), EC.N)
-	tmp11 := VectorAddScalar(aR, z)
-	tmp12 := ScalarVectorMul(sR, x)
-	tmp1 := VectorHadamard(y, VectorAdd(tmp11, tmp12))
-	tmp2 := ScalarVectorMul(po2, z2)
+	tmp11 := VectorAddScalar(aR, z, EC.N)
+	tmp12 := ScalarVectorMul(sR, x, EC.N)
+	tmp1 := VectorHadamard(y, VectorAdd(tmp11, tmp12, EC.N), EC.N)
+	tmp2 := ScalarVectorMul(po2, z2, EC.N)
 
-	result = VectorAdd(tmp1, tmp2)
+	result = VectorAdd(tmp1, tmp2, EC.N)
 
 	return result
 }
@@ -93,76 +93,85 @@ Given a value v, provides a range proof that v is inside 0 to 2^64-1
 */
 
 type MPRangeContext struct {
-	AL []*big.Int
-	AR []*big.Int
-	SL []*big.Int
-	SR []*big.Int
-	Alpha *big.Int
-	Rho *big.Int
-	Tau1 *big.Int
-	Tau2 *big.Int
-	T0 *big.Int
-	T1 *big.Int
-	T2 *big.Int
-	V *big.Int
+	ec *CryptoParams
+
+	aL []*big.Int
+	aR []*big.Int
+	sL []*big.Int
+	sR []*big.Int
+	alpha *big.Int
+	rho *big.Int
+	tau1 *big.Int
+	tau2 *big.Int
+	t0 *big.Int
+	t1 *big.Int
+	t2 *big.Int
+	v *big.Int
 }
 
-func RPProveStep0(ctx *MPRangeContext, rpresult *RangeProof, v *big.Int, gamma *big.Int) error {
+func NewMPRange(ec *CryptoParams) *MPRangeContext {
+	return &MPRangeContext{ec: ec}
+}
+
+func (m *MPRangeContext) RPProveStep0(rpresult *RangeProof, v *big.Int, comm ECPoint) error {
 	if v.Cmp(big.NewInt(0)) == -1 {
-		panic("Value is below range! Not proving")
+		return fmt.Errorf("Value is below range! Not proving")
 	}
 
-	if v.Cmp(new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(EC.V)), EC.N)) == 1 {
-		panic("Value is above range! Not proving.")
+	if v.Cmp(new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(m.ec.V)), m.ec.N)) == 1 {
+		return fmt.Errorf("Value is above range! Not proving.")
 	}
 
-	comm := EC.G.Mult(v).Add(EC.H.Mult(gamma))
 	rpresult.Comm = comm
 
 	// break up v into its bitwise representation
 	//aL := 0
-	aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", EC.V)))
-	aR := VectorAddScalar(aL, big.NewInt(-1))
+	aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", m.ec.V)))
+	aR := VectorAddScalar(aL, big.NewInt(-1), m.ec.N)
 
-	alpha, err := rand.Int(rand.Reader, EC.N)
-	check(err)
+	alpha, err := rand.Int(rand.Reader, m.ec.N)
+	if err != nil {
+		return err
+	}
 
-	A := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aL, aR).Add(EC.H.Mult(alpha))
+	A := m.ec.TwoVectorPCommitWithGens(m.ec.BPG, m.ec.BPH, aL, aR).Add(m.ec.H.Mult(alpha))
 	rpresult.A = A
 
-	sL := RandVector(EC.V)
-	sR := RandVector(EC.V)
+	sL := RandVector(m.ec.V, m.ec.N)
+	sR := RandVector(m.ec.V, m.ec.N)
 
-	rho, err := rand.Int(rand.Reader, EC.N)
-	check(err)
+	rho, err := rand.Int(rand.Reader, m.ec.N)
+	if err != nil {
+		return err
+	}
 
-	S := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, sL, sR).Add(EC.H.Mult(rho))
+	S := m.ec.TwoVectorPCommitWithGens(m.ec.BPG, m.ec.BPH, sL, sR).Add(m.ec.H.Mult(rho))
 	rpresult.S = S
 
-	ctx.AL = aL
-	ctx.AR = aR
-	ctx.SL = sL
-	ctx.SR = sR
-	ctx.Alpha = alpha
-	ctx.Rho = rho
-	ctx.V = v
+	m.aL = aL
+	m.aR = aR
+	m.sL = sL
+	m.sR = sR
+	m.alpha = alpha
+	m.rho = rho
+	m.v = v
 
 	return nil
 }
 
-func RPProveStep1(ctx *MPRangeContext, rpresult *RangeProof) error {
-	aL := ctx.AL
-	aR := ctx.AR
-	sL := ctx.SL
-	sR := ctx.SR
-	v := ctx.V
+func (m *MPRangeContext) RPProveStep1(rpresult *RangeProof) error {
+	aL := m.aL
+	aR := m.aR
+	sL := m.sL
+	sR := m.sR
+	v := m.v
 
 	cy := rpresult.Cy
 	cz := rpresult.Cz
 
-	PowerOfTwos := PowerVector(EC.V, big.NewInt(2))
+	PowerOfTwos := PowerVector(m.ec.V, big.NewInt(2), m.ec.N)
 
-	z2 := new(big.Int).Exp(cz, big.NewInt(2), EC.N)
+	z2 := new(big.Int).Exp(cz, big.NewInt(2), m.ec.N)
 	// need to generate l(X), r(X), and t(X)=<l(X),r(X)>
 
 	/*
@@ -182,69 +191,73 @@ func RPProveStep1(ctx *MPRangeContext, rpresult *RangeProof) error {
 
 
 	*/
-	PowerOfCY := PowerVector(EC.V, cy)
+	PowerOfCY := PowerVector(m.ec.V, cy, m.ec.N)
 	// fmt.Println(PowerOfCY)
-	l0 := VectorAddScalar(aL, new(big.Int).Neg(cz))
+	l0 := VectorAddScalar(aL, new(big.Int).Neg(cz), m.ec.N)
 	// l1 := sL
 	r0 := VectorAdd(
 		VectorHadamard(
 			PowerOfCY,
-			VectorAddScalar(aR, cz)),
+			VectorAddScalar(aR, cz, m.ec.N), m.ec.N),
 		ScalarVectorMul(
 			PowerOfTwos,
-			z2))
-	r1 := VectorHadamard(sR, PowerOfCY)
+			z2, m.ec.N), m.ec.N)
+	r1 := VectorHadamard(sR, PowerOfCY, m.ec.N)
 
 	//calculate t0
-	t0 := new(big.Int).Mod(new(big.Int).Add(new(big.Int).Mul(v, z2), Delta(PowerOfCY, cz)), EC.N)
+	t0 := new(big.Int).Mod(new(big.Int).Add(new(big.Int).Mul(v, z2), Delta(m.ec, PowerOfCY, cz)), m.ec.N)
 
-	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(sL, r0), InnerProduct(l0, r1)), EC.N)
-	t2 := InnerProduct(sL, r1)
+	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(sL, r0, m.ec.N), InnerProduct(l0, r1, m.ec.N)), m.ec.N)
+	t2 := InnerProduct(sL, r1, m.ec.N)
 
 	// given the t_i values, we can generate commitments to them
-	tau1, err := rand.Int(rand.Reader, EC.N)
-	check(err)
-	tau2, err := rand.Int(rand.Reader, EC.N)
-	check(err)
+	tau1, err := rand.Int(rand.Reader, m.ec.N)
+	if err != nil {
+		return err
+	}
+	tau2, err := rand.Int(rand.Reader, m.ec.N)
+	if err != nil {
+		return err
+	}
 
-	T1 := EC.G.Mult(t1).Add(EC.H.Mult(tau1)) //commitment to t1
-	T2 := EC.G.Mult(t2).Add(EC.H.Mult(tau2)) //commitment to t2
+	T1 := m.ec.G.Mult(t1).Add(m.ec.H.Mult(tau1)) //commitment to t1
+	T2 := m.ec.G.Mult(t2).Add(m.ec.H.Mult(tau2)) //commitment to t2
 
 	rpresult.T1 = T1
 	rpresult.T2 = T2
 
-	ctx.Tau1 = tau1
-	ctx.Tau2 = tau2
-	ctx.T0 = t0
-	ctx.T1 = t1
-	ctx.T2 = t2
+	m.tau1 = tau1
+	m.tau2 = tau2
+	m.t0 = t0
+	m.t1 = t1
+	m.t2 = t2
 
 	return nil
 }
 
-func RPProveStep2(ctx *MPRangeContext, rpresult *RangeProof, gamma *big.Int) error {
-	alpha := ctx.Alpha
-	rho := ctx.Rho
-	tau1 := ctx.Tau1
-	tau2 := ctx.Tau2
-	aL := ctx.AL
-	aR := ctx.AR
-	sL := ctx.SL
-	sR := ctx.SR
-	t0 := ctx.T0
-	t1 := ctx.T1
-	t2 := ctx.T2
+func (m *MPRangeContext) RPProveStep2(rpresult *RangeProof, gamma *big.Int) error {
+	alpha := m.alpha
+	rho := m.rho
+	tau1 := m.tau1
+	tau2 := m.tau2
+	aL := m.aL
+	aR := m.aR
+	sL := m.sL
+	sR := m.sR
+	t0 := m.t0
+	t1 := m.t1
+	t2 := m.t2
 
 	cy := rpresult.Cy
 	cz := rpresult.Cz
 	cx := rpresult.Cx
 
-	PowerOfTwos := PowerVector(EC.V, big.NewInt(2))
-	PowerOfCY := PowerVector(EC.V, cy)
-	z2 := new(big.Int).Exp(cz, big.NewInt(2), EC.N)
+	PowerOfTwos := PowerVector(m.ec.V, big.NewInt(2), m.ec.N)
+	PowerOfCY := PowerVector(m.ec.V, cy, m.ec.N)
+	z2 := new(big.Int).Exp(cz, big.NewInt(2), m.ec.N)
 
-	left := CalculateL(aL, sL, cz, cx)
-	right := CalculateR(aR, sR, PowerOfCY, PowerOfTwos, cz, cx)
+	left := CalculateL(m.ec, aL, sL, cz, cx)
+	right := CalculateR(m.ec, aR, sR, PowerOfCY, PowerOfTwos, cz, cx)
 
 	thatPrime := new(big.Int).Mod( // t0 + t1*x + t2*x^2
 		new(big.Int).Add(
@@ -254,9 +267,9 @@ func RPProveStep2(ctx *MPRangeContext, rpresult *RangeProof, gamma *big.Int) err
 					t1, cx),
 				new(big.Int).Mul(
 					new(big.Int).Mul(cx, cx),
-					t2))), EC.N)
+					t2))), m.ec.N)
 
-	that := InnerProduct(left, right) // NOTE: BP Java implementation calculates this from the t_i
+	that := InnerProduct(left, right, m.ec.N) // NOTE: BP Java implementation calculates this from the t_i
 
 	// thatPrime and that should be equal
 	if thatPrime.Cmp(that) != 0 {
@@ -267,14 +280,14 @@ func RPProveStep2(ctx *MPRangeContext, rpresult *RangeProof, gamma *big.Int) err
 
 	rpresult.Th = thatPrime
 
-	taux1 := new(big.Int).Mod(new(big.Int).Mul(tau2, new(big.Int).Mul(cx, cx)), EC.N)
-	taux2 := new(big.Int).Mod(new(big.Int).Mul(tau1, cx), EC.N)
-	taux3 := new(big.Int).Mod(new(big.Int).Mul(z2, gamma), EC.N)
-	taux := new(big.Int).Mod(new(big.Int).Add(taux1, new(big.Int).Add(taux2, taux3)), EC.N)
+	taux1 := new(big.Int).Mod(new(big.Int).Mul(tau2, new(big.Int).Mul(cx, cx)), m.ec.N)
+	taux2 := new(big.Int).Mod(new(big.Int).Mul(tau1, cx), m.ec.N)
+	taux3 := new(big.Int).Mod(new(big.Int).Mul(z2, gamma), m.ec.N)
+	taux := new(big.Int).Mod(new(big.Int).Add(taux1, new(big.Int).Add(taux2, taux3)), m.ec.N)
 
 	rpresult.Tau = taux
 
-	mu := new(big.Int).Mod(new(big.Int).Add(alpha, new(big.Int).Mul(rho, cx)), EC.N)
+	mu := new(big.Int).Mod(new(big.Int).Add(alpha, new(big.Int).Mul(rho, cx)), m.ec.N)
 	rpresult.Mu = mu
 
 	rpresult.L = left
@@ -292,38 +305,38 @@ func padding(l, r []*big.Int, G, H []ECPoint) ([]*big.Int, []*big.Int, []ECPoint
 		for i := power - len(G); i > 0; i-- {
 			l = append(l, big.NewInt(0))
 			r = append(r, big.NewInt(0))
-			G = append(G, ECPoint{big.NewInt(0), big.NewInt(0)})
-			H = append(H, ECPoint{big.NewInt(0), big.NewInt(0)})
+			G = append(G, NewECPoint(big.NewInt(0), big.NewInt(0)))
+			H = append(H, NewECPoint(big.NewInt(0), big.NewInt(0)))
 		}
 	}
 	return l, r, G, H
 }
 
-func RPProveStep3(rpresult *RangeProof) error {
-	PowersOfY := expand(PowerVector(EC.V, rpresult.Cy))
-	HPrime := make([]ECPoint, len(EC.BPH))
+func RPProveStep3(ec *CryptoParams, rpresult *RangeProof) error {
+	PowersOfY := expand(PowerVector(ec.V, rpresult.Cy, ec.N), len(ec.BPG))
+	HPrime := make([]ECPoint, len(ec.BPH))
 
 	for i := range HPrime {
-		HPrime[i] = EC.BPH[i].Mult(new(big.Int).ModInverse(PowersOfY[i], EC.N))
+		HPrime[i] = ec.BPH[i].Mult(new(big.Int).ModInverse(PowersOfY[i], ec.N))
 	}
 
-	P := TwoVectorPCommitWithGens(EC.BPG, HPrime, rpresult.L, rpresult.R)
+	P := ec.TwoVectorPCommitWithGens(ec.BPG, HPrime, rpresult.L, rpresult.R)
 
-	G := EC.BPG
+	G := ec.BPG
 	left := rpresult.L
 	right := rpresult.R
 
 	left, right, G, HPrime = padding(left, right, G, HPrime)
-	rpresult.IPP = InnerProductProve(left, right, rpresult.Th, P, EC.U, G, HPrime)
+	rpresult.IPP = InnerProductProve(ec, left, right, rpresult.Th, P, ec.U, G, HPrime)
 
 	return nil
 }
 
-func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
+func RPProve(EC *CryptoParams, v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 
 	rpresult := RangeProof{}
 
-	PowerOfTwos := PowerVector(EC.V, big.NewInt(2))
+	PowerOfTwos := PowerVector(EC.V, big.NewInt(2), EC.N)
 
 	if v.Cmp(big.NewInt(0)) == -1 {
 		panic("Value is below range! Not proving")
@@ -339,21 +352,21 @@ func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 	// break up v into its bitwise representation
 	//aL := 0
 	aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", EC.V)))
-	aR := VectorAddScalar(aL, big.NewInt(-1))
+	aR := VectorAddScalar(aL, big.NewInt(-1), EC.N)
 
 	alpha, err := rand.Int(rand.Reader, EC.N)
 	check(err)
 
-	A := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aL, aR).Add(EC.H.Mult(alpha))
+	A := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aL, aR).Add(EC.H.Mult(alpha))
 	rpresult.A = A
 
-	sL := RandVector(EC.V)
-	sR := RandVector(EC.V)
+	sL := RandVector(EC.V, EC.N)
+	sR := RandVector(EC.V, EC.N)
 
 	rho, err := rand.Int(rand.Reader, EC.N)
 	check(err)
 
-	S := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, sL, sR).Add(EC.H.Mult(rho))
+	S := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, sL, sR).Add(EC.H.Mult(rho))
 	rpresult.S = S
 
 	h := sha256.New()
@@ -400,24 +413,24 @@ func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 
 
 	*/
-	PowerOfCY := PowerVector(EC.V, cy)
+	PowerOfCY := PowerVector(EC.V, cy, EC.N)
 	// fmt.Println(PowerOfCY)
-	l0 := VectorAddScalar(aL, new(big.Int).Neg(cz))
+	l0 := VectorAddScalar(aL, new(big.Int).Neg(cz), EC.N)
 	// l1 := sL
 	r0 := VectorAdd(
 		VectorHadamard(
 			PowerOfCY,
-			VectorAddScalar(aR, cz)),
+			VectorAddScalar(aR, cz, EC.N), EC.N),
 		ScalarVectorMul(
 			PowerOfTwos,
-			z2))
-	r1 := VectorHadamard(sR, PowerOfCY)
+			z2, EC.N), EC.N)
+	r1 := VectorHadamard(sR, PowerOfCY, EC.N)
 
 	//calculate t0
-	t0 := new(big.Int).Mod(new(big.Int).Add(new(big.Int).Mul(v, z2), Delta(PowerOfCY, cz)), EC.N)
+	t0 := new(big.Int).Mod(new(big.Int).Add(new(big.Int).Mul(v, z2), Delta(EC, PowerOfCY, cz)), EC.N)
 
-	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(sL, r0), InnerProduct(l0, r1)), EC.N)
-	t2 := InnerProduct(sL, r1)
+	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(sL, r0, EC.N), InnerProduct(l0, r1, EC.N)), EC.N)
+	t2 := InnerProduct(sL, r1, EC.N)
 
 	// given the t_i values, we can generate commitments to them
 	tau1, err := rand.Int(rand.Reader, EC.N)
@@ -442,8 +455,8 @@ func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 
 	rpresult.Cx = cx
 
-	left := CalculateL(aL, sL, cz, cx)
-	right := CalculateR(aR, sR, PowerOfCY, PowerOfTwos, cz, cx)
+	left := CalculateL(EC, aL, sL, cz, cx)
+	right := CalculateR(EC, aR, sR, PowerOfCY, PowerOfTwos, cz, cx)
 
 	thatPrime := new(big.Int).Mod( // t0 + t1*x + t2*x^2
 		new(big.Int).Add(
@@ -455,7 +468,7 @@ func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 					new(big.Int).Mul(cx, cx),
 					t2))), EC.N)
 
-	that := InnerProduct(left, right) // NOTE: BP Java implementation calculates this from the t_i
+	that := InnerProduct(left, right, EC.N) // NOTE: BP Java implementation calculates this from the t_i
 
 	// thatPrime and that should be equal
 	if thatPrime.Cmp(that) != 0 {
@@ -505,19 +518,18 @@ func RPProve(v *big.Int, gamma *big.Int, uncompress bool) RangeProof {
 
 	//P1 := A.Add(S.Mult(cx)).Add(tmp1).Add(tmp2).Add(EC.U.Mult(that)).Add(EC.H.Mult(mu).Neg())
 
-	P := TwoVectorPCommitWithGens(EC.BPG, HPrime, left, right)
+	P := EC.TwoVectorPCommitWithGens(EC.BPG, HPrime, left, right)
 	//fmt.Println(P1)
 	//fmt.Println(P2)
 
 	G := EC.BPG
 	left, right, G, HPrime = padding(left, right, G, HPrime)
-	rpresult.IPP = InnerProductProve(left, right, that, P, EC.U, G, HPrime)
+	rpresult.IPP = InnerProductProve(EC, left, right, that, P, EC.U, G, HPrime)
 
 	return rpresult
 }
 
-func expand(v []*big.Int) []*big.Int {
-	n := len(EC.BPG)
+func expand(v []*big.Int, n int) []*big.Int {
 	repeat := n / len(v)
 	r := make([]*big.Int, n)
 	for i, e := range v {
@@ -528,7 +540,7 @@ func expand(v []*big.Int) []*big.Int {
 	return r
 }
 
-func RPVerify(rp RangeProof) bool {
+func RPVerify(EC *CryptoParams, rp RangeProof) error {
 	// verify the challenges
 	var cx, cy, cz *big.Int
 
@@ -544,8 +556,7 @@ func RPVerify(rp RangeProof) bool {
 	chal1s256 := h.Sum(nil)
 	cy = new(big.Int).SetBytes(chal1s256)
 	if rp.Cy != nil && cy.Cmp(rp.Cy) != 0 {
-		fmt.Println("RPVerify - Challenge Cy failing!")
-		return false
+		return fmt.Errorf("RPVerify - Challenge Cy failing!")
 	}
 
 	h.Reset()
@@ -557,8 +568,7 @@ func RPVerify(rp RangeProof) bool {
 	chal2s256 := h.Sum(nil)
 	cz = new(big.Int).SetBytes(chal2s256)
 	if rp.Cz != nil && cz.Cmp(rp.Cz) != 0 {
-		fmt.Println("RPVerify - Challenge Cz failing!")
-		return false
+		return fmt.Errorf("RPVerify - Challenge Cz failing!")
 	}
 
 	h.Reset()
@@ -570,8 +580,7 @@ func RPVerify(rp RangeProof) bool {
 	chal3s256 := h.Sum(nil)
 	cx = new(big.Int).SetBytes(chal3s256)
 	if rp.Cx != nil && cx.Cmp(rp.Cx) != 0 {
-		fmt.Println("RPVerify - Challenge Cx failing!")
-		return false
+		return fmt.Errorf("RPVerify - Challenge Cx failing!")
 	}
 
 	/* @@
@@ -602,13 +611,13 @@ func RPVerify(rp RangeProof) bool {
 	@@ */
 
 	// given challenges are correct, very range proof
-	PowersOfY := PowerVector(EC.V, cy)
+	PowersOfY := PowerVector(EC.V, cy, EC.N)
 
 	// t_hat * G + tau * H
 	lhs := EC.G.Mult(rp.Th).Add(EC.H.Mult(rp.Tau))
 
 	// z^2 * V + delta(y,z) * G + x * T1 + x^2 * T2
-	delta := Delta(PowersOfY, cz)
+	delta := Delta(EC, PowersOfY, cz)
 	delta.Mul(delta, big.NewInt(int64(rp.Factor)))
 	/*
 	if delta.Cmp(big.NewInt(0)) < 0 {
@@ -622,10 +631,9 @@ func RPVerify(rp RangeProof) bool {
 		rp.T2.Mult(new(big.Int).Mul(cx, cx)))
 
 	if !lhs.Equal(rhs) {
-		fmt.Println("RPVerify - Uh oh! Check line (63) of verification")
 		fmt.Printf("rhs = %x\n", rhs)
 		fmt.Printf("lhs = %x\n", lhs)
-		return false
+		return fmt.Errorf("RPVerify - Uh oh! Check line (63) of verification")
 	}
 
 	tmp1 := EC.Zero()
@@ -634,11 +642,11 @@ func RPVerify(rp RangeProof) bool {
 		tmp1 = tmp1.Add(EC.BPG[i].Mult(zneg))
 	}
 
-	PowerOfTwos := PowerVector(EC.V, big.NewInt(2))
+	PowerOfTwos := PowerVector(EC.V, big.NewInt(2), EC.N)
 	// @@ MPC
 	if len(PowerOfTwos) != len(EC.BPG) {
-		PowersOfY = expand(PowersOfY)
-		PowerOfTwos = expand(PowerOfTwos)
+		PowersOfY = expand(PowersOfY, len(EC.BPG))
+		PowerOfTwos = expand(PowerOfTwos, len(EC.BPG))
 	}
 	// @@@
 	tmp2 := EC.Zero()
@@ -670,16 +678,15 @@ func RPVerify(rp RangeProof) bool {
 		} else {
 			th = rp.Th
 		}
-		result = InnerProductVerifyFast(th, P, EC.U, EC.BPG, HPrime, rp.IPP)
+		result = InnerProductVerifyFast(EC, th, P, EC.U, EC.BPG, HPrime, rp.IPP)
 	} else if rp.L != nil && rp.R != nil {
-		result = P.Equal(TwoVectorPCommitWithGens(EC.BPG, HPrime, rp.L, rp.R))
+		result = P.Equal(EC.TwoVectorPCommitWithGens(EC.BPG, HPrime, rp.L, rp.R))
 	} else {
-		fmt.Println("No proof!")
+		return fmt.Errorf("RPVerify - No proof!")
 	}
 	if !result {
-		fmt.Println("RPVerify - Uh oh! Check line (65) of verification!")
-		return false
+		return fmt.Errorf("RPVerify - Uh oh! Check line (65) of verification!")
 	}
 
-	return true
+	return nil
 }

@@ -9,16 +9,16 @@ import (
 )
 
 type PoB struct {
+	m *MPRangeContext
 	proof RangeProof
 	gamma *big.Int
-	ctx MPRangeContext
 }
 
 var svals = []int{40, 60}
 var dvals = []int{80, 10, 5, 5}
 
 func TestMPC(t *testing.T) {
-	EC = NewECPrimeGroupKey(NBITS)
+	ec := NewECPrimeGroupKey(NBITS)
 
 	var srcs []*PoB
 	var dsts []*PoB
@@ -29,24 +29,26 @@ func TestMPC(t *testing.T) {
 	// step 0
 	//
 	for _, v := range svals {
-		gamma, err := rand.Int(rand.Reader, EC.N)
+		gamma, err := rand.Int(rand.Reader, ec.N)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var pob PoB
-		RPProveStep0(&pob.ctx, &pob.proof, big.NewInt(int64(v)), gamma)
+		comm := ec.G.Mult(big.NewInt(int64(v))).Add(ec.H.Mult(gamma))
+		pob := &PoB{m: NewMPRange(ec)}
+		pob.m.RPProveStep0(&pob.proof, big.NewInt(int64(v)), comm)
 		pob.gamma = gamma
-		srcs = append(srcs, &pob)
+		srcs = append(srcs, pob)
 	}
 	for _, v := range dvals {
-		gamma, err := rand.Int(rand.Reader, EC.N)
+		gamma, err := rand.Int(rand.Reader, ec.N)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var pob PoB
-		RPProveStep0(&pob.ctx, &pob.proof, big.NewInt(int64(v)), gamma)
+		comm := ec.G.Mult(big.NewInt(int64(v))).Add(ec.H.Mult(gamma))
+		pob := &PoB{m: NewMPRange(ec)}
+		pob.m.RPProveStep0(&pob.proof, big.NewInt(int64(v)), comm)
 		pob.gamma = gamma
-		dsts = append(dsts, &pob)
+		dsts = append(dsts, pob)
 	}
 
 	// calculate y, z
@@ -64,7 +66,7 @@ func TestMPC(t *testing.T) {
 	}
 	cp.Comm.X.FillBytes(buf)	// comm
 	h.Write(buf)
-	h.Write([]byte{byte(EC.V)})	// n
+	h.Write([]byte{byte(ec.V)})	// n
 	cp.A.X.FillBytes(buf)	// A.x
 	h.Write(buf)
 	cp.S.X.FillBytes(buf)	// S.x
@@ -89,7 +91,7 @@ func TestMPC(t *testing.T) {
 	for _, pob := range append(srcs, dsts...) {
 		pob.proof.Cy = cy
 		pob.proof.Cz = cz
-		RPProveStep1(&pob.ctx, &pob.proof)
+		pob.m.RPProveStep1(&pob.proof)
 	}
 
 	for _, pob := range srcs {
@@ -117,7 +119,7 @@ func TestMPC(t *testing.T) {
 	//
 	for _, pob := range append(srcs, dsts...) {
 		pob.proof.Cx = cx
-		RPProveStep2(&pob.ctx, &pob.proof, pob.gamma)
+		pob.m.RPProveStep2(&pob.proof, pob.gamma)
 	}
 
 	cp.Factor = 0
@@ -126,13 +128,13 @@ func TestMPC(t *testing.T) {
 	cp.Mu = big.NewInt(0)
 	th := big.NewInt(0)
 	n := len(srcs) + len(dsts)
-	cp.L = make([]*big.Int, n * EC.V)
-	cp.R = make([]*big.Int, n * EC.V)
+	cp.L = make([]*big.Int, n * ec.V)
+	cp.R = make([]*big.Int, n * ec.V)
 	b := 0
 	for _, pob := range srcs {
-		cp.Tau.Mod(cp.Tau.Add(cp.Tau, pob.proof.Tau), EC.N)
-		cp.Th.Mod(cp.Th.Add(cp.Th, pob.proof.Th), EC.N)
-		cp.Mu.Mod(cp.Mu.Add(cp.Mu, pob.proof.Mu), EC.N)
+		cp.Tau.Mod(cp.Tau.Add(cp.Tau, pob.proof.Tau), ec.N)
+		cp.Th.Mod(cp.Th.Add(cp.Th, pob.proof.Th), ec.N)
+		cp.Mu.Mod(cp.Mu.Add(cp.Mu, pob.proof.Mu), ec.N)
 		for i, l := range pob.proof.L {
 			cp.L[i * n + b] = l
 		}
@@ -141,12 +143,12 @@ func TestMPC(t *testing.T) {
 		}
 		b += 1
 		cp.Factor += 1
-		th.Add(th, InnerProduct(pob.proof.L, pob.proof.R))
+		th.Add(th, InnerProduct(pob.proof.L, pob.proof.R, ec.N))
 	}
 	for _, pob := range dsts {
-		cp.Tau.Mod(cp.Tau.Add(cp.Tau, new(big.Int).Sub(EC.N, pob.proof.Tau)), EC.N)
-		cp.Th.Mod(cp.Th.Add(cp.Th, new(big.Int).Sub(EC.N, pob.proof.Th)), EC.N)
-		cp.Mu.Mod(cp.Mu.Add(cp.Mu, pob.proof.Mu), EC.N)
+		cp.Tau.Mod(cp.Tau.Add(cp.Tau, new(big.Int).Sub(ec.N, pob.proof.Tau)), ec.N)
+		cp.Th.Mod(cp.Th.Add(cp.Th, new(big.Int).Sub(ec.N, pob.proof.Th)), ec.N)
+		cp.Mu.Mod(cp.Mu.Add(cp.Mu, pob.proof.Mu), ec.N)
 		for i, l := range pob.proof.L {
 			cp.L[i * n + b] = l
 		}
@@ -155,22 +157,22 @@ func TestMPC(t *testing.T) {
 		}
 		b += 1
 		cp.Factor -= 1
-		th.Add(th, new(big.Int).Sub(EC.N, InnerProduct(pob.proof.L, pob.proof.R)))
+		th.Add(th, new(big.Int).Sub(ec.N, InnerProduct(pob.proof.L, pob.proof.R, ec.N)))
 	}
-	th.Mod(th, EC.N)
+	th.Mod(th, ec.N)
 
 	// interleave g and h
 	var iG, iH []ECPoint
-	for i := 0; i < len(EC.BPG); i++ {
+	for i := 0; i < len(ec.BPG); i++ {
 		for j := 0; j < n; j++ {
-			iG = append(iG, EC.BPG[i])
-			iH = append(iH, EC.BPH[i])
+			iG = append(iG, ec.BPG[i])
+			iH = append(iH, ec.BPH[i])
 		}
 	}
-	EC.BPG = iG
-	EC.BPH = iH
+	ec.BPG = iG
+	ec.BPH = iH
 
-	RPProveStep3(&cp)
+	RPProveStep3(ec, &cp)
 
 	//
 	// check if \Sum <l,r> ?= t^
@@ -179,13 +181,13 @@ func TestMPC(t *testing.T) {
 		fmt.Println("\\Sum <l,r> != t^")
 	}
 
-	cp.LR = InnerProduct(cp.L, cp.R)
+	cp.LR = InnerProduct(cp.L, cp.R, ec.N)
 
 	//
 	// Verify it
 	//
-	if !RPVerify(cp) {
-		t.Fatalf("Verification failed")
+	if err := RPVerify(ec, cp); err != nil {
+		t.Fatalf("Verification failed: %v", err)
 	}
 
 	fmt.Printf("MPC size = %d\n", len(cp.IPP.L) * 2 + 4 + 5)

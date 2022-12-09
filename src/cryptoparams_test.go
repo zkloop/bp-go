@@ -14,14 +14,14 @@ func BenchmarkMRPVerifySize(b *testing.B) {
 				values[k] = big.NewInt(0)
 			}
 
-			EC = NewECPrimeGroupKey(64 * len(values))
+			EC := NewECPrimeGroupKey(64 * len(values))
 			// Testing smallest number in range
-			proof := MRPProve(values)
+			proof := MRPProve(EC, values)
 			proofString := fmt.Sprintf("%s", proof)
 			//fmt.Println(proofString)
 			fmt.Printf("Size for %d values: %d bytes\n", j, len(proofString)) // length is good measure of bytes, correct?
 
-			if MRPVerify(proof) {
+			if MRPVerify(EC, proof) {
 				fmt.Println("Multi Range Proof Verification works")
 			} else {
 				fmt.Println("***** Multi Range Proof FAILURE")
@@ -39,10 +39,10 @@ func BenchmarkMRPProve16(b *testing.B) {
 	for k := 0; k < j; k++ {
 		values[k] = big.NewInt(0)
 	}
-	EC = NewECPrimeGroupKey(64 * len(values))
+	EC := NewECPrimeGroupKey(64 * len(values))
 	var r MultiRangeProof
 	for i := 0; i < b.N; i++ {
-		r = MRPProve(values)
+		r = MRPProve(EC, values)
 	}
 
 	result = r
@@ -54,12 +54,12 @@ func BenchmarkMRPVerify16(b *testing.B) {
 	for k := 0; k < j; k++ {
 		values[k] = big.NewInt(0)
 	}
-	EC = NewECPrimeGroupKey(64 * len(values))
-	proof := MRPProve(values)
+	EC := NewECPrimeGroupKey(64 * len(values))
+	proof := MRPProve(EC, values)
 
 	var r bool
 	for i := 0; i < b.N; i++ {
-		r = MRPVerify(proof)
+		r = MRPVerify(EC, proof)
 	}
 	boores = r
 }
@@ -70,10 +70,10 @@ func BenchmarkMRPProve32(b *testing.B) {
 	for k := 0; k < j; k++ {
 		values[k] = big.NewInt(0)
 	}
-	EC = NewECPrimeGroupKey(64 * len(values))
+	EC := NewECPrimeGroupKey(64 * len(values))
 	var r MultiRangeProof
 	for i := 0; i < b.N; i++ {
-		r = MRPProve(values)
+		r = MRPProve(EC, values)
 	}
 	result = r
 }
@@ -84,11 +84,11 @@ func BenchmarkMRPVerify32(b *testing.B) {
 	for k := 0; k < j; k++ {
 		values[k] = big.NewInt(0)
 	}
-	EC = NewECPrimeGroupKey(64 * len(values))
-	proof := MRPProve(values)
+	EC := NewECPrimeGroupKey(64 * len(values))
+	proof := MRPProve(EC, values)
 	var r bool
 	for i := 0; i < b.N; i++ {
-		r = MRPVerify(proof)
+		r = MRPVerify(EC, proof)
 	}
 	boores = r
 }

@@ -7,7 +7,7 @@ import (
 )
 
 // The length here always has to be a power of two
-func InnerProduct(a []*big.Int, b []*big.Int) *big.Int {
+func InnerProduct(a []*big.Int, b []*big.Int, n *big.Int) *big.Int {
 	if len(a) != len(b) {
 		fmt.Println("InnerProduct: Uh oh! Arrays not of the same length")
 		fmt.Printf("len(a): %d\n", len(a))
@@ -18,13 +18,13 @@ func InnerProduct(a []*big.Int, b []*big.Int) *big.Int {
 
 	for i := range a {
 		tmp1 := new(big.Int).Mul(a[i], b[i])
-		c = new(big.Int).Add(c, new(big.Int).Mod(tmp1, EC.N))
+		c = new(big.Int).Add(c, new(big.Int).Mod(tmp1, n))
 	}
 
-	return new(big.Int).Mod(c, EC.N)
+	return new(big.Int).Mod(c, n)
 }
 
-func VectorAdd(v []*big.Int, w []*big.Int) []*big.Int {
+func VectorAdd(v []*big.Int, w []*big.Int, n *big.Int) []*big.Int {
 	if len(v) != len(w) {
 		fmt.Println("VectorAdd: Uh oh! Arrays not of the same length")
 		fmt.Printf("len(v): %d\n", len(v))
@@ -33,13 +33,13 @@ func VectorAdd(v []*big.Int, w []*big.Int) []*big.Int {
 	result := make([]*big.Int, len(v))
 
 	for i := range v {
-		result[i] = new(big.Int).Mod(new(big.Int).Add(v[i], w[i]), EC.N)
+		result[i] = new(big.Int).Mod(new(big.Int).Add(v[i], w[i]), n)
 	}
 
 	return result
 }
 
-func VectorHadamard(v, w []*big.Int) []*big.Int {
+func VectorHadamard(v, w []*big.Int, n *big.Int) []*big.Int {
 	if len(v) != len(w) {
 		fmt.Println("VectorHadamard: Uh oh! Arrays not of the same length")
 		fmt.Printf("len(v): %d\n", len(w))
@@ -49,27 +49,27 @@ func VectorHadamard(v, w []*big.Int) []*big.Int {
 	result := make([]*big.Int, len(v))
 
 	for i := range v {
-		result[i] = new(big.Int).Mod(new(big.Int).Mul(v[i], w[i]), EC.N)
+		result[i] = new(big.Int).Mod(new(big.Int).Mul(v[i], w[i]), n)
 	}
 
 	return result
 }
 
-func VectorAddScalar(v []*big.Int, s *big.Int) []*big.Int {
+func VectorAddScalar(v []*big.Int, s *big.Int, n *big.Int) []*big.Int {
 	result := make([]*big.Int, len(v))
 
 	for i := range v {
-		result[i] = new(big.Int).Mod(new(big.Int).Add(v[i], s), EC.N)
+		result[i] = new(big.Int).Mod(new(big.Int).Add(v[i], s), n)
 	}
 
 	return result
 }
 
-func ScalarVectorMul(v []*big.Int, s *big.Int) []*big.Int {
+func ScalarVectorMul(v []*big.Int, s *big.Int, n *big.Int) []*big.Int {
 	result := make([]*big.Int, len(v))
 
 	for i := range v {
-		result[i] = new(big.Int).Mod(new(big.Int).Mul(v[i], s), EC.N)
+		result[i] = new(big.Int).Mod(new(big.Int).Mul(v[i], s), n)
 	}
 
 	return result
@@ -121,33 +121,35 @@ func reverse(l []*big.Int) []*big.Int {
 	return result
 }
 
-func PowerVector(l int, base *big.Int) []*big.Int {
+func PowerVector(l int, base *big.Int, n *big.Int) []*big.Int {
 	result := make([]*big.Int, l)
 
 	for i := 0; i < l; i++ {
-		result[i] = new(big.Int).Exp(base, big.NewInt(int64(i)), EC.N)
+		result[i] = new(big.Int).Exp(base, big.NewInt(int64(i)), n)
 	}
 
 	return result
 }
 
-func RandVector(l int) []*big.Int {
+func RandVector(l int, n *big.Int) []*big.Int {
 	result := make([]*big.Int, l)
 
 	for i := 0; i < l; i++ {
-		x, err := rand.Int(rand.Reader, EC.N)
-		check(err)
+		x, err := rand.Int(rand.Reader, n)
+		if err != nil {
+			return nil
+		}
 		result[i] = x
 	}
 
 	return result
 }
 
-func VectorSum(y []*big.Int) *big.Int {
+func VectorSum(y []*big.Int, n *big.Int) *big.Int {
 	result := big.NewInt(0)
 
 	for _, j := range y {
-		result = new(big.Int).Mod(new(big.Int).Add(result, j), EC.N)
+		result = new(big.Int).Mod(new(big.Int).Add(result, j), n)
 	}
 
 	return result

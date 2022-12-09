@@ -8,14 +8,14 @@ import (
 
 func TestVectorPCommit3(t *testing.T) {
 	fmt.Println("TestVectorPCommit3")
-	EC = NewECPrimeGroupKey(3)
+	EC := NewECPrimeGroupKey(3)
 
 	v := make([]*big.Int, 3)
 	for j := range v {
 		v[j] = big.NewInt(2)
 	}
 
-	output, r := VectorPCommit(v)
+	output, r := EC.VectorPCommit(v)
 
 	if len(r) != 3 {
 		fmt.Println("Failure - rvalues doesn't match length of values")
