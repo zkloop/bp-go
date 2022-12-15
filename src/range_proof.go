@@ -19,13 +19,14 @@ type RangeProof struct {
 	IPP  InnerProdArg
 	L    []*big.Int
 	R    []*big.Int
-	Factor int
+	Factor int8
 	LR   *big.Int	// <l,r>, might be different than Th (t^) in the case of MPC
 
 	// challenges
 	Cy *big.Int
 	Cz *big.Int
 	Cx *big.Int
+	ConsolidatedChallenge bool
 }
 
 /*
@@ -544,46 +545,52 @@ func RPVerify(EC *CryptoParams, rp RangeProof) error {
 	// verify the challenges
 	var cx, cy, cz *big.Int
 
-	h := sha256.New()
-	buf := make([]byte, 32)
-	rp.Comm.X.FillBytes(buf)	// comm
-	h.Write(buf)
-	h.Write([]byte{byte(EC.V)})	// n
-	rp.A.X.FillBytes(buf)		// A.x
-	h.Write(buf)
-	rp.S.X.FillBytes(buf)		// S.x
-	h.Write(buf)
-	chal1s256 := h.Sum(nil)
-	cy = new(big.Int).SetBytes(chal1s256)
-	if rp.Cy != nil && cy.Cmp(rp.Cy) != 0 {
-		return fmt.Errorf("RPVerify - Challenge Cy failing!")
+	if !rp.ConsolidatedChallenge {
+		h := sha256.New()
+		buf := make([]byte, 32)
+		rp.Comm.X.FillBytes(buf)	// comm
+		h.Write(buf)
+		h.Write([]byte{byte(EC.V)})	// n
+		rp.A.X.FillBytes(buf)		// A.x
+		h.Write(buf)
+		rp.S.X.FillBytes(buf)		// S.x
+		h.Write(buf)
+		chal1s256 := h.Sum(nil)
+		cy = new(big.Int).SetBytes(chal1s256)
+		if rp.Cy != nil && cy.Cmp(rp.Cy) != 0 {
+			return fmt.Errorf("RPVerify - Challenge Cy failing!")
+		}
+
+		h.Reset()
+		rp.A.X.FillBytes(buf)		// A.x
+		h.Write(buf)
+		rp.S.X.FillBytes(buf)		// S.x
+		h.Write(buf)
+		h.Write(chal1s256)		// y
+		chal2s256 := h.Sum(nil)
+		cz = new(big.Int).SetBytes(chal2s256)
+		if rp.Cz != nil && cz.Cmp(rp.Cz) != 0 {
+			return fmt.Errorf("RPVerify - Challenge Cz failing!")
+		}
+
+		h.Reset()
+		h.Write(chal2s256)		// z
+		rp.T1.X.FillBytes(buf)		// T1.x
+		h.Write(buf)
+		rp.T2.X.FillBytes(buf)		// T2.x
+		h.Write(buf)
+		chal3s256 := h.Sum(nil)
+		cx = new(big.Int).SetBytes(chal3s256)
+		if rp.Cx != nil && cx.Cmp(rp.Cx) != 0 {
+			return fmt.Errorf("RPVerify - Challenge Cx failing!")
+		}
+	} else {
+		cx = rp.Cx
+		cy = rp.Cy
+		cz = rp.Cz
 	}
 
-	h.Reset()
-	rp.A.X.FillBytes(buf)		// A.x
-	h.Write(buf)
-	rp.S.X.FillBytes(buf)		// S.x
-	h.Write(buf)
-	h.Write(chal1s256)		// y
-	chal2s256 := h.Sum(nil)
-	cz = new(big.Int).SetBytes(chal2s256)
-	if rp.Cz != nil && cz.Cmp(rp.Cz) != 0 {
-		return fmt.Errorf("RPVerify - Challenge Cz failing!")
-	}
-
-	h.Reset()
-	h.Write(chal2s256)		// z
-	rp.T1.X.FillBytes(buf)		// T1.x
-	h.Write(buf)
-	rp.T2.X.FillBytes(buf)		// T2.x
-	h.Write(buf)
-	chal3s256 := h.Sum(nil)
-	cx = new(big.Int).SetBytes(chal3s256)
-	if rp.Cx != nil && cx.Cmp(rp.Cx) != 0 {
-		return fmt.Errorf("RPVerify - Challenge Cx failing!")
-	}
-
-	/* @@
+	/*
 	fmt.Printf("G = (%x, %x)\n", EC.G.X, EC.G.Y);
 	fmt.Printf("H = (%x, %x)\n", EC.H.X, EC.H.Y);
 	fmt.Printf("V = %x\n", rp.Comm.X)
@@ -594,9 +601,9 @@ func RPVerify(EC *CryptoParams, rp RangeProof) error {
 	fmt.Printf("z = %x\n", cz)
 	v := 25
 	aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", EC.V)))
-	aR := VectorAddScalar(aL, big.NewInt(-1))
+	aR := VectorAddScalar(aL, big.NewInt(-1), EC.N)
 	alpha, _ := new(big.Int).SetString("ade0b876903df1a0e56a5d4028bd8653b819d2bd1aed8da0ccef36a8c70d778b", 16)
-	A := TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aL, aR).Add(EC.H.Mult(alpha))
+	A := EC.TwoVectorPCommitWithGens(EC.BPG, EC.BPH, aL, aR).Add(EC.H.Mult(alpha))
 	fmt.Printf("A' = %x\n", A.X)
 	for i, p := range EC.BPG {
 		fmt.Printf("G[%d]: (%x, %x)\n", i, p.X, p.Y)
@@ -608,7 +615,7 @@ func RPVerify(EC *CryptoParams, rp RangeProof) error {
 	fmt.Printf("Th = %x\n", rp.Th)
 	fmt.Printf("Tau = %x\n", rp.Tau)
 	fmt.Printf("Mu = %x\n", rp.Mu)
-	@@ */
+	*/
 
 	// given challenges are correct, very range proof
 	PowersOfY := PowerVector(EC.V, cy, EC.N)

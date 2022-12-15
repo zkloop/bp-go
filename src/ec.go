@@ -35,8 +35,11 @@ func (p ECPoint) Mult(s *big.Int) ECPoint {
 
 // Add adds points p and p2 and returns the resulting point
 func (p ECPoint) Add(p2 ECPoint) ECPoint {
-	if (p.X == nil || p.Y == nil) {
+	if p.X == nil || p.Y == nil {
 		return p2
+	}
+	if p2.X == nil || p2.Y == nil {
+		return p
 	}
 	X, Y := p.C.Add(p.X, p.Y, p2.X, p2.Y)
 	return NewECPoint(X, Y)
@@ -50,5 +53,8 @@ func (p ECPoint) Neg() ECPoint {
 }
 
 func (p ECPoint) Sub(p2 ECPoint) ECPoint {
+	if p2.X == nil || p2.Y == nil {
+		return p
+	}
 	return p.Add(p2.Neg())
 }

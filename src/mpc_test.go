@@ -119,7 +119,12 @@ func TestMPC(t *testing.T) {
 	//
 	for _, pob := range append(srcs, dsts...) {
 		pob.proof.Cx = cx
+		pob.proof.Factor = 1
+		pob.proof.ConsolidatedChallenge = true
 		pob.m.RPProveStep2(&pob.proof, pob.gamma)
+		if err := RPVerify(ec, pob.proof); err != nil {	// can't verify because of challenges
+			t.Fatalf("Failed to verify share: %v", err)
+		}
 	}
 
 	cp.Factor = 0
