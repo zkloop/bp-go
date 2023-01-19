@@ -9,7 +9,7 @@ import (
 )
 
 type PoB struct {
-	m *MPRangeContext
+	m MPRangeContext
 	proof RangeProof
 	gamma *big.Int
 }
@@ -34,8 +34,8 @@ func TestMPC(t *testing.T) {
 			t.Fatal(err)
 		}
 		comm := ec.G.Mult(big.NewInt(int64(v))).Add(ec.H.Mult(gamma))
-		pob := &PoB{m: NewMPRange(ec)}
-		pob.m.RPProveStep0(&pob.proof, big.NewInt(int64(v)), comm)
+		pob := &PoB{}
+		RPProveStep0(ec, &pob.m, &pob.proof, big.NewInt(int64(v)), comm)
 		pob.gamma = gamma
 		srcs = append(srcs, pob)
 	}
@@ -45,8 +45,8 @@ func TestMPC(t *testing.T) {
 			t.Fatal(err)
 		}
 		comm := ec.G.Mult(big.NewInt(int64(v))).Add(ec.H.Mult(gamma))
-		pob := &PoB{m: NewMPRange(ec)}
-		pob.m.RPProveStep0(&pob.proof, big.NewInt(int64(v)), comm)
+		pob := &PoB{}
+		RPProveStep0(ec, &pob.m, &pob.proof, big.NewInt(int64(v)), comm)
 		pob.gamma = gamma
 		dsts = append(dsts, pob)
 	}
@@ -91,7 +91,7 @@ func TestMPC(t *testing.T) {
 	for _, pob := range append(srcs, dsts...) {
 		pob.proof.Cy = cy
 		pob.proof.Cz = cz
-		pob.m.RPProveStep1(&pob.proof)
+		RPProveStep1(ec, &pob.m, &pob.proof)
 	}
 
 	for _, pob := range srcs {
@@ -121,7 +121,7 @@ func TestMPC(t *testing.T) {
 		pob.proof.Cx = cx
 		pob.proof.Factor = 1
 		pob.proof.ConsolidatedChallenge = true
-		pob.m.RPProveStep2(&pob.proof, pob.gamma)
+		RPProveStep2(ec, &pob.m, &pob.proof, pob.gamma)
 		if err := RPVerify(ec, pob.proof); err != nil {	// can't verify because of challenges
 			t.Fatalf("Failed to verify share: %v", err)
 		}

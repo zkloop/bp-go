@@ -94,32 +94,26 @@ Given a value v, provides a range proof that v is inside 0 to 2^64-1
 */
 
 type MPRangeContext struct {
-	ec *CryptoParams
-
-	aL []*big.Int
-	aR []*big.Int
-	sL []*big.Int
-	sR []*big.Int
-	alpha *big.Int
-	rho *big.Int
-	tau1 *big.Int
-	tau2 *big.Int
-	t0 *big.Int
-	t1 *big.Int
-	t2 *big.Int
-	v *big.Int
+	AL []*big.Int	`asn1:"optional"`
+	AR []*big.Int	`asn1:"optional"`
+	SL []*big.Int	`asn1:"optional"`
+	SR []*big.Int	`asn1:"optional"`
+	Alpha *big.Int	`asn1:"optional"`
+	Rho *big.Int	`asn1:"optional"`
+	V *big.Int	`asn1:"optional"`
+	Tau1 *big.Int	`asn1:"optional"`
+	Tau2 *big.Int	`asn1:"optional"`
+	T0 *big.Int	`asn1:"optional"`
+	T1 *big.Int	`asn1:"optional"`
+	T2 *big.Int	`asn1:"optional"`
 }
 
-func NewMPRange(ec *CryptoParams) *MPRangeContext {
-	return &MPRangeContext{ec: ec}
-}
-
-func (m *MPRangeContext) RPProveStep0(rpresult *RangeProof, v *big.Int, comm ECPoint) error {
+func RPProveStep0(ec *CryptoParams, m *MPRangeContext, rpresult *RangeProof, v *big.Int, comm ECPoint) error {
 	if v.Cmp(big.NewInt(0)) == -1 {
 		return fmt.Errorf("Value is below range! Not proving")
 	}
 
-	if v.Cmp(new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(m.ec.V)), m.ec.N)) == 1 {
+	if v.Cmp(new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(ec.V)), ec.N)) == 1 {
 		return fmt.Errorf("Value is above range! Not proving.")
 	}
 
@@ -127,52 +121,52 @@ func (m *MPRangeContext) RPProveStep0(rpresult *RangeProof, v *big.Int, comm ECP
 
 	// break up v into its bitwise representation
 	//aL := 0
-	aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", m.ec.V)))
-	aR := VectorAddScalar(aL, big.NewInt(-1), m.ec.N)
+	aL := reverse(StrToBigIntArray(PadLeft(fmt.Sprintf("%b", v), "0", ec.V)))
+	aR := VectorAddScalar(aL, big.NewInt(-1), ec.N)
 
-	alpha, err := rand.Int(rand.Reader, m.ec.N)
+	alpha, err := rand.Int(rand.Reader, ec.N)
 	if err != nil {
 		return err
 	}
 
-	A := m.ec.TwoVectorPCommitWithGens(m.ec.BPG, m.ec.BPH, aL, aR).Add(m.ec.H.Mult(alpha))
+	A := ec.TwoVectorPCommitWithGens(ec.BPG, ec.BPH, aL, aR).Add(ec.H.Mult(alpha))
 	rpresult.A = A
 
-	sL := RandVector(m.ec.V, m.ec.N)
-	sR := RandVector(m.ec.V, m.ec.N)
+	sL := RandVector(ec.V, ec.N)
+	sR := RandVector(ec.V, ec.N)
 
-	rho, err := rand.Int(rand.Reader, m.ec.N)
+	rho, err := rand.Int(rand.Reader, ec.N)
 	if err != nil {
 		return err
 	}
 
-	S := m.ec.TwoVectorPCommitWithGens(m.ec.BPG, m.ec.BPH, sL, sR).Add(m.ec.H.Mult(rho))
+	S := ec.TwoVectorPCommitWithGens(ec.BPG, ec.BPH, sL, sR).Add(ec.H.Mult(rho))
 	rpresult.S = S
 
-	m.aL = aL
-	m.aR = aR
-	m.sL = sL
-	m.sR = sR
-	m.alpha = alpha
-	m.rho = rho
-	m.v = v
+	m.AL = aL
+	m.AR = aR
+	m.SL = sL
+	m.SR = sR
+	m.Alpha = alpha
+	m.Rho = rho
+	m.V = v
 
 	return nil
 }
 
-func (m *MPRangeContext) RPProveStep1(rpresult *RangeProof) error {
-	aL := m.aL
-	aR := m.aR
-	sL := m.sL
-	sR := m.sR
-	v := m.v
+func RPProveStep1(ec *CryptoParams, m *MPRangeContext, rpresult *RangeProof) error {
+	aL := m.AL
+	aR := m.AR
+	sL := m.SL
+	sR := m.SR
+	v := m.V
 
 	cy := rpresult.Cy
 	cz := rpresult.Cz
 
-	PowerOfTwos := PowerVector(m.ec.V, big.NewInt(2), m.ec.N)
+	PowerOfTwos := PowerVector(ec.V, big.NewInt(2), ec.N)
 
-	z2 := new(big.Int).Exp(cz, big.NewInt(2), m.ec.N)
+	z2 := new(big.Int).Exp(cz, big.NewInt(2), ec.N)
 	// need to generate l(X), r(X), and t(X)=<l(X),r(X)>
 
 	/*
@@ -192,73 +186,73 @@ func (m *MPRangeContext) RPProveStep1(rpresult *RangeProof) error {
 
 
 	*/
-	PowerOfCY := PowerVector(m.ec.V, cy, m.ec.N)
+	PowerOfCY := PowerVector(ec.V, cy, ec.N)
 	// fmt.Println(PowerOfCY)
-	l0 := VectorAddScalar(aL, new(big.Int).Neg(cz), m.ec.N)
+	l0 := VectorAddScalar(aL, new(big.Int).Neg(cz), ec.N)
 	// l1 := sL
 	r0 := VectorAdd(
 		VectorHadamard(
 			PowerOfCY,
-			VectorAddScalar(aR, cz, m.ec.N), m.ec.N),
+			VectorAddScalar(aR, cz, ec.N), ec.N),
 		ScalarVectorMul(
 			PowerOfTwos,
-			z2, m.ec.N), m.ec.N)
-	r1 := VectorHadamard(sR, PowerOfCY, m.ec.N)
+			z2, ec.N), ec.N)
+	r1 := VectorHadamard(sR, PowerOfCY, ec.N)
 
 	//calculate t0
-	t0 := new(big.Int).Mod(new(big.Int).Add(new(big.Int).Mul(v, z2), Delta(m.ec, PowerOfCY, cz)), m.ec.N)
+	t0 := new(big.Int).Mod(new(big.Int).Add(new(big.Int).Mul(v, z2), Delta(ec, PowerOfCY, cz)), ec.N)
 
-	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(sL, r0, m.ec.N), InnerProduct(l0, r1, m.ec.N)), m.ec.N)
-	t2 := InnerProduct(sL, r1, m.ec.N)
+	t1 := new(big.Int).Mod(new(big.Int).Add(InnerProduct(sL, r0, ec.N), InnerProduct(l0, r1, ec.N)), ec.N)
+	t2 := InnerProduct(sL, r1, ec.N)
 
 	// given the t_i values, we can generate commitments to them
-	tau1, err := rand.Int(rand.Reader, m.ec.N)
+	tau1, err := rand.Int(rand.Reader, ec.N)
 	if err != nil {
 		return err
 	}
-	tau2, err := rand.Int(rand.Reader, m.ec.N)
+	tau2, err := rand.Int(rand.Reader, ec.N)
 	if err != nil {
 		return err
 	}
 
-	T1 := m.ec.G.Mult(t1).Add(m.ec.H.Mult(tau1)) //commitment to t1
-	T2 := m.ec.G.Mult(t2).Add(m.ec.H.Mult(tau2)) //commitment to t2
+	T1 := ec.G.Mult(t1).Add(ec.H.Mult(tau1)) //commitment to t1
+	T2 := ec.G.Mult(t2).Add(ec.H.Mult(tau2)) //commitment to t2
 
 	rpresult.T1 = T1
 	rpresult.T2 = T2
 
-	m.tau1 = tau1
-	m.tau2 = tau2
-	m.t0 = t0
-	m.t1 = t1
-	m.t2 = t2
+	m.Tau1 = tau1
+	m.Tau2 = tau2
+	m.T0 = t0
+	m.T1 = t1
+	m.T2 = t2
 
 	return nil
 }
 
-func (m *MPRangeContext) RPProveStep2(rpresult *RangeProof, gamma *big.Int) error {
-	alpha := m.alpha
-	rho := m.rho
-	tau1 := m.tau1
-	tau2 := m.tau2
-	aL := m.aL
-	aR := m.aR
-	sL := m.sL
-	sR := m.sR
-	t0 := m.t0
-	t1 := m.t1
-	t2 := m.t2
+func RPProveStep2(ec *CryptoParams, m *MPRangeContext, rpresult *RangeProof, gamma *big.Int) error {
+	alpha := m.Alpha
+	rho := m.Rho
+	tau1 := m.Tau1
+	tau2 := m.Tau2
+	aL := m.AL
+	aR := m.AR
+	sL := m.SL
+	sR := m.SR
+	t0 := m.T0
+	t1 := m.T1
+	t2 := m.T2
 
 	cy := rpresult.Cy
 	cz := rpresult.Cz
 	cx := rpresult.Cx
 
-	PowerOfTwos := PowerVector(m.ec.V, big.NewInt(2), m.ec.N)
-	PowerOfCY := PowerVector(m.ec.V, cy, m.ec.N)
-	z2 := new(big.Int).Exp(cz, big.NewInt(2), m.ec.N)
+	PowerOfTwos := PowerVector(ec.V, big.NewInt(2), ec.N)
+	PowerOfCY := PowerVector(ec.V, cy, ec.N)
+	z2 := new(big.Int).Exp(cz, big.NewInt(2), ec.N)
 
-	left := CalculateL(m.ec, aL, sL, cz, cx)
-	right := CalculateR(m.ec, aR, sR, PowerOfCY, PowerOfTwos, cz, cx)
+	left := CalculateL(ec, aL, sL, cz, cx)
+	right := CalculateR(ec, aR, sR, PowerOfCY, PowerOfTwos, cz, cx)
 
 	thatPrime := new(big.Int).Mod( // t0 + t1*x + t2*x^2
 		new(big.Int).Add(
@@ -268,9 +262,9 @@ func (m *MPRangeContext) RPProveStep2(rpresult *RangeProof, gamma *big.Int) erro
 					t1, cx),
 				new(big.Int).Mul(
 					new(big.Int).Mul(cx, cx),
-					t2))), m.ec.N)
+					t2))), ec.N)
 
-	that := InnerProduct(left, right, m.ec.N) // NOTE: BP Java implementation calculates this from the t_i
+	that := InnerProduct(left, right, ec.N) // NOTE: BP Java implementation calculates this from the t_i
 
 	// thatPrime and that should be equal
 	if thatPrime.Cmp(that) != 0 {
@@ -281,14 +275,14 @@ func (m *MPRangeContext) RPProveStep2(rpresult *RangeProof, gamma *big.Int) erro
 
 	rpresult.Th = thatPrime
 
-	taux1 := new(big.Int).Mod(new(big.Int).Mul(tau2, new(big.Int).Mul(cx, cx)), m.ec.N)
-	taux2 := new(big.Int).Mod(new(big.Int).Mul(tau1, cx), m.ec.N)
-	taux3 := new(big.Int).Mod(new(big.Int).Mul(z2, gamma), m.ec.N)
-	taux := new(big.Int).Mod(new(big.Int).Add(taux1, new(big.Int).Add(taux2, taux3)), m.ec.N)
+	taux1 := new(big.Int).Mod(new(big.Int).Mul(tau2, new(big.Int).Mul(cx, cx)), ec.N)
+	taux2 := new(big.Int).Mod(new(big.Int).Mul(tau1, cx), ec.N)
+	taux3 := new(big.Int).Mod(new(big.Int).Mul(z2, gamma), ec.N)
+	taux := new(big.Int).Mod(new(big.Int).Add(taux1, new(big.Int).Add(taux2, taux3)), ec.N)
 
 	rpresult.Tau = taux
 
-	mu := new(big.Int).Mod(new(big.Int).Add(alpha, new(big.Int).Mul(rho, cx)), m.ec.N)
+	mu := new(big.Int).Mod(new(big.Int).Add(alpha, new(big.Int).Mul(rho, cx)), ec.N)
 	rpresult.Mu = mu
 
 	rpresult.L = left
