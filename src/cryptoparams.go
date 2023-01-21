@@ -17,7 +17,6 @@ import (
 
 type CryptoParams struct {
 	C   elliptic.Curve      // curve
-	KC  *btcec.KoblitzCurve // curve
 	BPG []ECPoint           // slice of gen 1 for BP
 	BPH []ECPoint           // slice of gen 2 for BP
 	N   *big.Int            // scalar prime
@@ -84,7 +83,6 @@ func NewECPrimeGroupKey(n int) *CryptoParams {
 	}
 
 	return &CryptoParams{
-		btcec.S256(),
 		btcec.S256(),
 		gen1Vals,
 		gen2Vals,
