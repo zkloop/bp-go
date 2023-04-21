@@ -1,4 +1,4 @@
-module github.com/r2ishiguro/bp-go
+module github.com/r2ishiguro/bp-go/bp
 
 go 1.18
 
